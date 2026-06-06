@@ -1,0 +1,330 @@
+import React from 'react';
+import { useTrainerStore } from '../store/trainerStore';
+import type { KeyBindings } from '../types';
+
+export const Settings: React.FC = () => {
+  const {
+    submissionMethod,
+    cancelMethod,
+    smartLearningEnabled,
+    sessionLength,
+    priceTrainingEnabled,
+    keyBindings,
+    trackResets,
+    trackOvershoots,
+    trackRecoveries,
+    maxPriceAdjustment,
+    updateSettings,
+    clearHistory
+  } = useTrainerStore();
+
+  const handleKeyCapture = (e: React.KeyboardEvent<HTMLInputElement>, field: keyof KeyBindings) => {
+    e.preventDefault();
+    updateSettings({
+      keyBindings: {
+        ...keyBindings,
+        [field]: e.code
+      }
+    });
+  };
+
+  const bindingRows = [
+    { label: 'Group A (NSDQ / ARCA / EDGX / EDGA)', buyField: 'buyGroupA' as const, sellField: 'sellGroupA' as const },
+    { label: 'Group S (NYSE / NSEX / IEX)', buyField: 'buyGroupS' as const, sellField: 'sellGroupS' as const },
+    { label: 'Group D (CHX / PHLX)', buyField: 'buyGroupD' as const, sellField: 'sellGroupD' as const },
+    { label: 'Group Z (MEMX / MIAX / AMEX)', buyField: 'buyGroupZ' as const, sellField: 'sellGroupZ' as const },
+    { label: 'Group X (BATS / BATY / BOSX)', buyField: 'buyGroupX' as const, sellField: 'sellGroupX' as const }
+  ];
+
+  return (
+    <div className="w-full max-w-7xl mx-auto space-y-5 animate-fadeIn">
+      {/* Title */}
+      <div className="bg-terminal-panel border border-terminal-border p-4">
+        <h2 className="text-base font-bold font-mono tracking-wider text-terminal-text uppercase">
+          [SETTINGS_MANAGER] - TERMINAL CONFIGURATION
+        </h2>
+        <p className="text-xs text-terminal-muted mt-0.5">
+          Review and alter physical routing definitions, defaults, and auditing criteria.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Left Column: General, Training, Analytics */}
+        <div className="lg:col-span-5 space-y-5">
+          {/* GENERAL */}
+          <div className="bg-terminal-panel border border-terminal-border p-4 space-y-4">
+            <h3 className="text-xs font-bold font-mono text-terminal-text border-b border-terminal-border pb-2 uppercase tracking-wide">
+              GENERAL SETTINGS
+            </h3>
+
+            <div className="space-y-3">
+              {/* Submission Method */}
+              <div>
+                <span className="text-[10px] font-mono text-terminal-muted uppercase block mb-1">
+                  Submission Mode
+                </span>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-1.5 text-xs font-mono text-terminal-text cursor-pointer">
+                    <input
+                      type="radio"
+                      name="subMethod"
+                      checked={submissionMethod === 'Enter'}
+                      onChange={() => updateSettings({ submissionMethod: 'Enter' })}
+                      className="accent-info-blue"
+                    />
+                    Enter
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs font-mono text-terminal-text cursor-pointer">
+                    <input
+                      type="radio"
+                      name="subMethod"
+                      checked={submissionMethod === 'ShiftEnter'}
+                      onChange={() => updateSettings({ submissionMethod: 'ShiftEnter' })}
+                      className="accent-info-blue"
+                    />
+                    Shift + Enter
+                  </label>
+                </div>
+              </div>
+
+              {/* Cancel Method */}
+              <div>
+                <span className="text-[10px] font-mono text-terminal-muted uppercase block mb-1">
+                  Clear/Cancel Mode
+                </span>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-1.5 text-xs font-mono text-terminal-text cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancelMethod"
+                      checked={cancelMethod === 'Escape'}
+                      onChange={() => updateSettings({ cancelMethod: 'Escape' })}
+                      className="accent-info-blue"
+                    />
+                    Escape
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs font-mono text-terminal-text cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancelMethod"
+                      checked={cancelMethod === 'ShiftEscape'}
+                      onChange={() => updateSettings({ cancelMethod: 'ShiftEscape' })}
+                      className="accent-info-blue"
+                    />
+                    Shift + Escape
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* TRAINING */}
+          <div className="bg-terminal-panel border border-terminal-border p-4 space-y-4">
+            <h3 className="text-xs font-bold font-mono text-terminal-text border-b border-terminal-border pb-2 uppercase tracking-wide">
+              TRAINING DEFAULTS
+            </h3>
+
+            <div className="space-y-3">
+              {/* Smart Learning Default */}
+              <div className="flex justify-between items-center py-1">
+                <div>
+                  <span className="text-xs font-mono text-terminal-text block">Smart Learning</span>
+                  <span className="text-[10px] font-mono text-terminal-muted">Adapt weights based on mistake frequency</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={smartLearningEnabled}
+                    onChange={(e) => updateSettings({ smartLearningEnabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-terminal-bg border border-terminal-border peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-terminal-muted after:border-terminal-border after:border after:h-3.5 after:w-3.5 after:transition-all peer-checked:after:bg-info-blue peer-checked:border-info-blue"></div>
+                </label>
+              </div>
+
+              {/* Default Prompt Count */}
+              <div>
+                <label className="text-[10px] font-mono text-terminal-muted uppercase block mb-1">
+                  Default Prompt Count
+                </label>
+                <select
+                  value={sessionLength}
+                  onChange={(e) => updateSettings({ sessionLength: Number(e.target.value) })}
+                  className="w-full bg-terminal-bg border border-terminal-border text-xs py-1 px-2 text-terminal-text font-mono focus:outline-none focus:border-info-blue"
+                >
+                  <option value={10}>10 Prompts</option>
+                  <option value={25}>25 Prompts</option>
+                  <option value={50}>50 Prompts</option>
+                  <option value={100}>100 Prompts</option>
+                  <option value={0}>Unlimited</option>
+                </select>
+              </div>
+
+              {/* Price Training Default */}
+              <div className="flex justify-between items-center py-1 font-mono">
+                <div>
+                  <span className="text-xs text-terminal-text block">Price Training Default</span>
+                  <span className="text-[10px] text-terminal-muted">Include price adjustment arrow tasks</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={priceTrainingEnabled}
+                    onChange={(e) => updateSettings({ priceTrainingEnabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-terminal-bg border border-terminal-border peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-terminal-muted after:border-terminal-border after:border after:h-3.5 after:w-3.5 after:transition-all peer-checked:after:bg-info-blue peer-checked:border-info-blue"></div>
+                </label>
+              </div>
+
+              {/* Max Price Adjustment Limit */}
+              <div>
+                <label className="text-[10px] font-mono text-terminal-muted uppercase block mb-1 font-bold">
+                  Max Price Adjustment
+                </label>
+                <select
+                  value={maxPriceAdjustment}
+                  onChange={(e) => updateSettings({ maxPriceAdjustment: Number(e.target.value) as 1 | 3 | 5 | 10 })}
+                  className="w-full bg-terminal-bg border border-terminal-border text-xs py-1 px-2 text-terminal-text font-mono focus:outline-none focus:border-info-blue"
+                >
+                  <option value={1}>1¢ Limit</option>
+                  <option value={3}>3¢ Limit</option>
+                  <option value={5}>5¢ Limit (Default)</option>
+                  <option value={10}>10¢ Limit</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* ANALYTICS */}
+          <div className="bg-terminal-panel border border-terminal-border p-4 space-y-4">
+            <h3 className="text-xs font-bold font-mono text-terminal-text border-b border-terminal-border pb-2 uppercase tracking-wide">
+              ANALYTICS CRITERIA
+            </h3>
+
+            <div className="space-y-3">
+              {/* Reset Tracking */}
+              <div className="flex justify-between items-center py-1">
+                <div>
+                  <span className="text-xs font-mono text-terminal-text block">Reset Tracking</span>
+                  <span className="text-[10px] font-mono text-terminal-muted">Audit spacebar input reset operations</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={trackResets}
+                    onChange={(e) => updateSettings({ trackResets: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-terminal-bg border border-terminal-border peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-terminal-muted after:border-terminal-border after:border after:h-3.5 after:w-3.5 after:transition-all peer-checked:after:bg-info-blue peer-checked:border-info-blue"></div>
+                </label>
+              </div>
+
+              {/* Overshoot Tracking */}
+              <div className="flex justify-between items-center py-1">
+                <div>
+                  <span className="text-xs font-mono text-terminal-text block">Overshoot Tracking</span>
+                  <span className="text-[10px] font-mono text-terminal-muted">Track excessive keystroke overshoots</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={trackOvershoots}
+                    onChange={(e) => updateSettings({ trackOvershoots: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-terminal-bg border border-terminal-border peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-terminal-muted after:border-terminal-border after:border after:h-3.5 after:w-3.5 after:transition-all peer-checked:after:bg-info-blue peer-checked:border-info-blue"></div>
+                </label>
+              </div>
+
+              {/* Recovery Tracking */}
+              <div className="flex justify-between items-center py-1">
+                <div>
+                  <span className="text-xs font-mono text-terminal-text block">Recovery Tracking</span>
+                  <span className="text-[10px] font-mono text-terminal-muted">Audit sequence adjustments before submission</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={trackRecoveries}
+                    onChange={(e) => updateSettings({ trackRecoveries: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-terminal-bg border border-terminal-border peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-terminal-muted after:border-terminal-border after:border after:h-3.5 after:w-3.5 after:transition-all peer-checked:after:bg-info-blue peer-checked:border-info-blue"></div>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Key Bindings */}
+        <div className="lg:col-span-7 bg-terminal-panel border border-terminal-border p-4 space-y-4 flex flex-col justify-between">
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold font-mono text-terminal-text border-b border-terminal-border pb-2 uppercase tracking-wide">
+              KEY BINDINGS
+            </h3>
+            <p className="text-[10px] font-mono text-terminal-muted leading-tight">
+              Re-map the physical keyboard keys mapped to ECN groups. Click a box and press any physical key to bind. Routing commands require holding the Shift modifier.
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left font-mono text-xs">
+                <thead>
+                  <tr className="border-b border-terminal-border text-terminal-muted text-[10px]">
+                    <th className="py-2">ECN GROUP DESCRIPTOR</th>
+                    <th className="py-2 w-32">BUY KEYBIND</th>
+                    <th className="py-2 w-32">SELL KEYBIND</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-terminal-border/30">
+                  {bindingRows.map((row) => (
+                    <tr key={row.label}>
+                      <td className="py-2.5 text-[11px] text-terminal-text font-bold uppercase pr-2">
+                        {row.label}
+                      </td>
+                      <td className="py-2.5">
+                        <input
+                          type="text"
+                          value={keyBindings[row.buyField]}
+                          onKeyDown={(e) => handleKeyCapture(e, row.buyField)}
+                          readOnly
+                          placeholder="Press key..."
+                          className="w-28 bg-terminal-bg border border-terminal-border text-center text-xs py-1 text-info-blue font-bold focus:outline-none focus:border-info-blue cursor-pointer"
+                        />
+                      </td>
+                      <td className="py-2.5">
+                        <input
+                          type="text"
+                          value={keyBindings[row.sellField]}
+                          onKeyDown={(e) => handleKeyCapture(e, row.sellField)}
+                          readOnly
+                          placeholder="Press key..."
+                          className="w-28 bg-terminal-bg border border-terminal-border text-center text-xs py-1 text-warning-amber font-bold focus:outline-none focus:border-warning-amber cursor-pointer"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-terminal-border/40">
+            <button
+              onClick={() => {
+                if (confirm('Flush historical trainer databases and ECN weights? This cannot be undone.')) {
+                  clearHistory();
+                }
+              }}
+              className="w-full py-2 bg-error-red/10 border border-error-red/30 hover:bg-error-red/20 text-error-red font-mono text-xs uppercase cursor-pointer font-bold"
+            >
+              Flush Local Storage History
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Settings;
