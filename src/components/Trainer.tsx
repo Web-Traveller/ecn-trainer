@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { useTrainerStore } from '../store/trainerStore';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useLiveTimer } from '../hooks/useLiveTimer';
-import { getTargetKeyAndPresses, processInput } from '../core/routing';
+import { processInput } from '../core/routing';
 import { ALL_ECNS } from '../core/learning';
 import type { ECN } from '../types';
 
@@ -29,12 +29,24 @@ export const Trainer: React.FC = () => {
     mode,
     priceTrainingEnabled,
     smartLearningEnabled,
-    examModeEnabled,
-    focusDrillEnabled,
-    focusDrillEcns,
+    targetEcnModeEnabled,
+    targetEcns,
     submissionMethod,
     cancelMethod,
     maxPriceAdjustment,
+    practiceModeType,
+    adaptivePacingEnabled,
+    feedbackDelayMs,
+    initialTimeLimitMs,
+    speedDecayMs,
+    speedPenaltyMs,
+    targetStreakLength,
+
+    // Run-time pacing state
+    countdownRemaining,
+    currentTimeLimitMs,
+    consecutiveCorrectCount,
+    missedCount,
 
     // Debug states
     lastPhysicalKey,
@@ -43,19 +55,71 @@ export const Trainer: React.FC = () => {
 
     // Actions
     updateSettings,
-    toggleFocusDrillEcn,
     startSession,
     pauseSession,
     resumeSession,
     endSession,
     resetSession,
-    setView
+    resetToIdle,
+    setView,
+    handleTimeout
   } = useTrainerStore();
 
   const timerRef = useRef<HTMLSpanElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
   
   // Activate high-resolution clock updating directly on the DOM ref
-  useLiveTimer(timerRef, startTime, sessionState, accumulatedElapsedMs);
+  useLiveTimer(
+    timerRef,
+    startTime,
+    sessionState,
+    accumulatedElapsedMs,
+    practiceModeType === 'time_limit' ? currentTimeLimitMs : undefined,
+    progressBarRef
+  );
+
+  // Ready Countdown timer effect
+  React.useEffect(() => {
+    if (sessionState !== 'RUNNING' || countdownRemaining === null) return;
+    const timer = setTimeout(() => {
+      if (countdownRemaining > 1) {
+        useTrainerStore.setState({ countdownRemaining: countdownRemaining - 1 });
+      } else {
+        useTrainerStore.setState({
+          countdownRemaining: null,
+          startTime: Date.now()
+        });
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [sessionState, countdownRemaining]);
+
+  // Timeout monitoring effect
+  React.useEffect(() => {
+    if (
+      sessionState !== 'RUNNING' ||
+      practiceModeType !== 'time_limit' ||
+      countdownRemaining !== null ||
+      startTime === null ||
+      feedback !== null
+    ) return;
+
+    let active = true;
+    const checkTimeout = () => {
+      if (!active) return;
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= currentTimeLimitMs) {
+        handleTimeout();
+      } else {
+        requestAnimationFrame(checkTimeout);
+      }
+    };
+
+    requestAnimationFrame(checkTimeout);
+    return () => {
+      active = false;
+    };
+  }, [sessionState, practiceModeType, countdownRemaining, startTime, currentTimeLimitMs, feedback, handleTimeout]);
 
   const [showDebug, setShowDebug] = React.useState(false);
 
@@ -104,7 +168,7 @@ export const Trainer: React.FC = () => {
   // --- 1. IDLE VIEW: PRE-SESSION CONFIGURATION AREA ---
   if (sessionState === 'IDLE') {
     return (
-      <div className="w-full max-w-4xl mx-auto space-y-5 animate-fadeIn">
+      <div key="trainer-config" className="w-full max-w-4xl mx-auto space-y-5 animate-fadeIn">
         <div className="bg-terminal-panel border border-terminal-border p-4">
           <h2 className="text-base font-bold font-mono tracking-wider text-terminal-text uppercase">
             [EX_CHAMBER] - SIMULATOR CONTROLS
@@ -161,20 +225,40 @@ export const Trainer: React.FC = () => {
             {/* Prompt Count */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-mono text-terminal-muted uppercase block">Prompt Count</label>
-              <div className="flex flex-wrap gap-3">
-                {[10, 25, 50, 100, 0].map((count) => (
+              <div className="flex flex-wrap gap-2.5 items-center">
+                {[10, 25, 50, 100].map((count) => (
                   <button
                     key={count}
-                    onClick={() => updateSettings({ sessionLength: count })}
-                    className={`px-2.5 py-1 font-mono text-xs border cursor-pointer ${
+                    onClick={() => {
+                      updateSettings({ sessionLength: count });
+                      (document.activeElement as HTMLElement)?.blur();
+                    }}
+                    className={`px-2.5 py-1 font-mono text-xs border cursor-pointer transition-colors ${
                       sessionLength === count 
                         ? 'bg-info-blue border-info-blue text-terminal-bg font-black' 
                         : 'border-terminal-border text-terminal-muted hover:border-terminal-muted'
                     }`}
                   >
-                    {count === 0 ? 'Unlimited' : count}
+                    {count}
                   </button>
                 ))}
+
+                <div className="flex items-center gap-2 font-mono text-xs text-terminal-text ml-2">
+                  <span className="text-[10px] text-terminal-muted uppercase">Custom:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={sessionLength}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val) && val > 0) {
+                        updateSettings({ sessionLength: val });
+                      }
+                    }}
+                    className="w-20 bg-terminal-bg border border-terminal-border text-xs py-1 px-1.5 text-terminal-text font-mono text-center focus:outline-none focus:border-info-blue"
+                    placeholder="Count"
+                  />
+                </div>
               </div>
             </div>
 
@@ -205,23 +289,16 @@ export const Trainer: React.FC = () => {
                 <label className="flex items-center gap-2 text-xs font-mono text-terminal-text cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    checked={examModeEnabled}
-                    onChange={(e) => updateSettings({ examModeEnabled: e.target.checked })}
+                    checked={targetEcnModeEnabled}
+                    onChange={(e) => updateSettings({ targetEcnModeEnabled: e.target.checked })}
                     className="accent-info-blue"
                   />
-                  Exam Mode
-                </label>
-                <label className="flex items-center gap-2 text-xs font-mono text-terminal-text cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={focusDrillEnabled}
-                    onChange={(e) => updateSettings({ focusDrillEnabled: e.target.checked })}
-                    className="accent-info-blue"
-                  />
-                  Focus Drill Only
+                  Target ECN Mode
                 </label>
               </div>
             </div>
+
+
 
             {/* Max Price Adjustment selector */}
             {priceTrainingEnabled && (
@@ -272,38 +349,174 @@ export const Trainer: React.FC = () => {
               </div>
             </div>
 
+            {/* Pacing Controls */}
+            <div className="space-y-3 border-t border-terminal-border/40 pt-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-terminal-muted uppercase block">Drill Type</label>
+                  <select
+                    value={practiceModeType}
+                    onChange={(e) => updateSettings({ practiceModeType: e.target.value as 'stable' | 'time_limit' })}
+                    className="w-full bg-terminal-bg border border-terminal-border text-terminal-text text-xs font-mono p-1.5 rounded-none outline-none cursor-pointer"
+                  >
+                    <option value="stable">Stable (Accuracy focus)</option>
+                    <option value="time_limit">Time-Limit (Speed focus)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-terminal-muted uppercase block">Feedback Transition</label>
+                  <select
+                    value={feedbackDelayMs}
+                    onChange={(e) => updateSettings({ feedbackDelayMs: Number(e.target.value) })}
+                    className="w-full bg-terminal-bg border border-terminal-border text-terminal-text text-xs font-mono p-1.5 rounded-none outline-none cursor-pointer"
+                  >
+                    <option value="0">Instant (0ms)</option>
+                    <option value="250">Snappy (250ms)</option>
+                    <option value="500">Normal (500ms)</option>
+                    <option value="1000">Slow (1000ms)</option>
+                  </select>
+                </div>
+              </div>
+
+              {practiceModeType === 'time_limit' && (
+                <div className="space-y-3 pt-1 border-t border-terminal-border/20 mt-1 font-mono text-xs">
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-xs font-mono text-terminal-text cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={adaptivePacingEnabled}
+                        onChange={(e) => updateSettings({ adaptivePacingEnabled: e.target.checked })}
+                        className="accent-info-blue"
+                      />
+                      Adaptive Speed Pacing
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-terminal-muted uppercase block">Start Limit (sec)</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0.5"
+                        max="10"
+                        value={initialTimeLimitMs / 1000}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val) && val > 0) {
+                            updateSettings({ initialTimeLimitMs: Math.round(val * 1000) });
+                          }
+                        }}
+                        className="w-full bg-terminal-bg border border-terminal-border text-xs py-1 px-2 text-terminal-text font-mono focus:outline-none focus:border-info-blue"
+                      />
+                    </div>
+
+                    {adaptivePacingEnabled && (
+                      <>
+                        <div className="space-y-1">
+                          <span className="text-[10px] text-terminal-muted uppercase block">Decay Step (sec)</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            max="1"
+                            value={speedDecayMs / 1000}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              if (!isNaN(val) && val >= 0) {
+                                updateSettings({ speedDecayMs: Math.round(val * 1000) });
+                              }
+                            }}
+                            className="w-full bg-terminal-bg border border-terminal-border text-xs py-1 px-2 text-terminal-text font-mono focus:outline-none focus:border-info-blue"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <span className="text-[10px] text-terminal-muted uppercase block">Penalty Step (sec)</span>
+                          <input
+                            type="number"
+                            step="0.05"
+                            min="0.05"
+                            max="2"
+                            value={speedPenaltyMs / 1000}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              if (!isNaN(val) && val >= 0) {
+                                updateSettings({ speedPenaltyMs: Math.round(val * 1000) });
+                              }
+                            }}
+                            className="w-full bg-terminal-bg border border-terminal-border text-xs py-1 px-2 text-terminal-text font-mono focus:outline-none focus:border-info-blue"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <span className="text-[10px] text-terminal-muted uppercase block">Correct Threshold</span>
+                          <input
+                            type="number"
+                            min="1"
+                            max="50"
+                            value={targetStreakLength}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              if (!isNaN(val) && val > 0) {
+                                updateSettings({ targetStreakLength: val });
+                              }
+                            }}
+                            className="w-full bg-terminal-bg border border-terminal-border text-xs py-1 px-2 text-terminal-text font-mono focus:outline-none focus:border-info-blue"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
-              onClick={startSession}
+              onClick={() => { startSession(); (document.activeElement as HTMLElement)?.blur(); }}
               className="w-full py-3 bg-success-green hover:bg-success-green/90 text-terminal-bg text-sm font-black font-mono tracking-wider cursor-pointer border-0 uppercase"
             >
               Start Simulator Run
             </button>
           </div>
 
-          {/* ECN Focus Drill list */}
-          <div className="md:col-span-6 bg-terminal-panel border border-terminal-border p-4 space-y-3">
+          {/* ECN Target Mode list */}
+          <div className={`md:col-span-6 bg-terminal-panel border border-terminal-border p-4 space-y-3 transition-opacity duration-200 ${
+            !targetEcnModeEnabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''
+          }`}>
             <h3 className="text-xs font-bold font-mono text-terminal-text border-b border-terminal-border pb-2 uppercase tracking-wide">
-              FOCUS DRILL ECN SELECTION
+              TARGET ECN SELECTION
             </h3>
             <p className="text-[10px] font-mono text-terminal-muted leading-tight">
-              Toggle specific target routes. If "Focus Drill Only" is enabled, options are restricted to your checked ECN selection.
+              Select one or more target ECNs. Enable "Target ECN Mode" on the left to activate.
             </p>
 
             <div className="grid grid-cols-3 gap-2 pt-1">
               {ALL_ECNS.map((ecn) => {
-                const checked = focusDrillEcns.includes(ecn);
+                const isSelected = targetEcns.includes(ecn);
                 return (
-                  <label
+                  <button
                     key={ecn}
-                    onClick={() => toggleFocusDrillEcn(ecn)}
+                    disabled={!targetEcnModeEnabled}
+                    onClick={() => {
+                      let nextEcns: ECN[];
+                      if (targetEcns.includes(ecn)) {
+                        nextEcns = targetEcns.length > 1 ? targetEcns.filter((e) => e !== ecn) : targetEcns;
+                      } else {
+                        nextEcns = [...targetEcns, ecn];
+                      }
+                      updateSettings({ targetEcns: nextEcns });
+                      (document.activeElement as HTMLElement)?.blur();
+                    }}
                     className={`p-1.5 border text-center font-mono text-xs cursor-pointer select-none transition-colors ${
-                      checked 
+                      isSelected 
                         ? 'bg-info-blue/10 border-info-blue text-info-blue font-bold' 
                         : 'bg-terminal-bg border-terminal-border text-terminal-muted hover:border-terminal-muted'
                     }`}
                   >
                     {ecn}
-                  </label>
+                  </button>
                 );
               })}
             </div>
@@ -316,7 +529,7 @@ export const Trainer: React.FC = () => {
   // --- 2. SUMMARY VIEW: COMPLETED OR TERMINATED ---
   if (sessionState === 'COMPLETED' || sessionState === 'TERMINATED') {
     return (
-      <div className="w-full max-w-3xl mx-auto space-y-5 animate-fadeIn">
+      <div key="trainer-results" className="w-full max-w-4xl mx-auto space-y-5 animate-fadeIn">
         <div className="bg-terminal-panel border border-terminal-border p-4">
           <div className="flex justify-between items-center">
             <h2 className="text-base font-bold font-mono tracking-wider text-terminal-text uppercase">
@@ -333,80 +546,96 @@ export const Trainer: React.FC = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:h-[430px]">
           {/* Main stats matrix */}
-          <div className="bg-terminal-panel border border-terminal-border p-4 space-y-3 font-mono text-xs">
+          <div className="bg-terminal-panel border border-terminal-border p-4 flex flex-col justify-between font-mono text-xs h-full">
             <h3 className="text-xs font-bold text-terminal-text border-b border-terminal-border pb-2 uppercase tracking-wide">
               PERFORMANCE SNAPSHOT
             </h3>
-            <div className="flex justify-between py-1.5 border-b border-terminal-border/30">
-              <span className="text-terminal-muted">Total Prompts:</span>
-              <span className="text-terminal-text font-bold">{totalPrompts}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-terminal-border/30">
-              <span className="text-terminal-muted">Correct Submissions:</span>
-              <span className="text-success-green font-bold">{correctPrompts}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-terminal-border/30">
-              <span className="text-terminal-muted">Incorrect Slips:</span>
-              <span className="text-error-red font-bold">{incorrectPrompts}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-terminal-border/30">
-              <span className="text-terminal-muted">Final Accuracy:</span>
-              <span className={`font-black ${finalAccuracy >= 90 ? 'text-success-green' : finalAccuracy >= 75 ? 'text-warning-amber' : 'text-error-red'}`}>
-                {finalAccuracy.toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-terminal-border/30">
-              <span className="text-terminal-muted">Average Reaction:</span>
-              <span className="text-info-blue font-bold">{(averageTimeMs / 1000).toFixed(3)}s</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-terminal-border/30">
-              <span className="text-terminal-muted">Fastest Latency:</span>
-              <span className="text-terminal-text">{(fastestTimeMs / 1000).toFixed(3)}s</span>
-            </div>
-            <div className="flex justify-between py-1.5">
-              <span className="text-terminal-muted">Slowest Latency:</span>
-              <span className="text-terminal-text">{(slowestTimeMs / 1000).toFixed(3)}s</span>
+            <div className="flex-1 flex flex-col justify-between py-2">
+              <div className="flex justify-between py-1 border-b border-terminal-border/30">
+                <span className="text-terminal-muted">Total Prompts:</span>
+                <span className="text-terminal-text font-bold">{totalPrompts}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-terminal-border/30">
+                <span className="text-terminal-muted">Correct Submissions:</span>
+                <span className="text-success-green font-bold">{correctPrompts}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-terminal-border/30">
+                <span className="text-terminal-muted">Incorrect Slips:</span>
+                <span className="text-error-red font-bold">{incorrectPrompts}</span>
+              </div>
+              {practiceModeType === 'time_limit' && (
+                <div className="flex justify-between py-1 border-b border-terminal-border/30">
+                  <span className="text-terminal-muted">Missed Prints (Timeouts):</span>
+                  <span className="text-warning-amber font-bold">{missedCount}</span>
+                </div>
+              )}
+              <div className="flex justify-between py-1 border-b border-terminal-border/30">
+                <span className="text-terminal-muted">Final Accuracy:</span>
+                <span className={`font-black ${finalAccuracy >= 90 ? 'text-success-green' : finalAccuracy >= 75 ? 'text-warning-amber' : 'text-error-red'}`}>
+                  {finalAccuracy.toFixed(1)}%
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-terminal-border/30">
+                <span className="text-terminal-muted">Average Reaction:</span>
+                <span className="text-info-blue font-bold">{(averageTimeMs / 1000).toFixed(3)}s</span>
+              </div>
+              {practiceModeType === 'time_limit' && adaptivePacingEnabled && (
+                <div className="flex justify-between py-1 border-b border-terminal-border/30">
+                  <span className="text-terminal-muted">Final Target Speed Limit:</span>
+                  <span className="text-terminal-text font-bold">{(currentTimeLimitMs / 1000).toFixed(3)}s</span>
+                </div>
+              )}
+              <div className="flex justify-between py-1 border-b border-terminal-border/30">
+                <span className="text-terminal-muted">Fastest Latency:</span>
+                <span className="text-terminal-text">{(fastestTimeMs / 1000).toFixed(3)}s</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-terminal-muted">Slowest Latency:</span>
+                <span className="text-terminal-text">{(slowestTimeMs / 1000).toFixed(3)}s</span>
+              </div>
             </div>
           </div>
 
           {/* Mismatch & Mistakes matrix */}
-          <div className="bg-terminal-panel border border-terminal-border p-4 space-y-4 font-mono text-xs">
-            <div>
-              <h3 className="text-xs font-bold text-terminal-text border-b border-terminal-border pb-2 uppercase tracking-wide">
-                MOST COMMON MISMATCHES
-              </h3>
-              {sortedMistakes.length === 0 ? (
-                <p className="text-[11px] text-success-green py-2 font-bold uppercase">No incorrect keystrokes recorded!</p>
-              ) : (
-                <div className="space-y-1.5 pt-2">
-                  {sortedMistakes.map((m, idx) => (
-                    <div key={idx} className="flex justify-between text-[11px]">
-                      <span>Expected <strong className="text-success-green">{m.expected}</strong> → Got <strong className="text-error-red">{m.actual}</strong></span>
-                      <span className="text-terminal-muted">({m.count} times)</span>
-                    </div>
-                  ))}
+          <div className="bg-terminal-panel border border-terminal-border p-4 flex flex-col justify-between font-mono text-xs h-full">
+            <div className="flex-1 flex flex-col justify-between gap-4 h-full">
+              <div className="flex-1 flex flex-col min-h-0">
+                <h3 className="text-xs font-bold text-terminal-text border-b border-terminal-border pb-2 uppercase tracking-wide">
+                  MOST COMMON MISMATCHES
+                </h3>
+                <div className="flex-1 overflow-y-auto pt-2 space-y-1.5 max-h-[140px] pr-1">
+                  {sortedMistakes.length === 0 ? (
+                    <p className="text-[11px] text-success-green py-2 font-bold uppercase">No incorrect keystrokes recorded!</p>
+                  ) : (
+                    sortedMistakes.map((m, idx) => (
+                      <div key={idx} className="flex justify-between text-[11px]">
+                        <span>Expected <strong className="text-success-green">{m.expected}</strong> → Got <strong className="text-error-red">{m.actual}</strong></span>
+                        <span className="text-terminal-muted">({m.count} times)</span>
+                      </div>
+                    ))
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
 
-            <div>
-              <h3 className="text-xs font-bold text-terminal-text border-b border-terminal-border pb-2 uppercase tracking-wide">
-                {"WEAKEST DESTINATIONS (<100% ACC)"}
-              </h3>
-              {weakestEcns.length === 0 ? (
-                <p className="text-[11px] text-success-green py-2 font-bold uppercase">100% accuracy across all ECNs!</p>
-              ) : (
-                <div className="space-y-1.5 pt-2">
-                  {weakestEcns.map((w, idx) => (
-                    <div key={idx} className="flex justify-between text-[11px]">
-                      <span className="font-bold text-terminal-text">{w.ecn}</span>
-                      <span className="text-error-red">{w.accuracy.toFixed(1)}% accuracy ({w.correct}/{w.total})</span>
-                    </div>
-                  ))}
+              <div className="flex-1 flex flex-col min-h-0 mt-2 border-t border-terminal-border/20 pt-2">
+                <h3 className="text-xs font-bold text-terminal-text border-b border-terminal-border pb-2 uppercase tracking-wide">
+                  {"WEAKEST DESTINATIONS (<100% ACC)"}
+                </h3>
+                <div className="flex-1 overflow-y-auto pt-2 space-y-1.5 max-h-[140px] pr-1">
+                  {weakestEcns.length === 0 ? (
+                    <p className="text-[11px] text-success-green py-2 font-bold uppercase">100% accuracy across all ECNs!</p>
+                  ) : (
+                    weakestEcns.map((w, idx) => (
+                      <div key={idx} className="flex justify-between text-[11px]">
+                        <span className="font-bold text-terminal-text">{w.ecn}</span>
+                        <span className="text-error-red">{w.accuracy.toFixed(1)}% accuracy ({w.correct}/{w.total})</span>
+                      </div>
+                    ))
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </div>
@@ -415,8 +644,8 @@ export const Trainer: React.FC = () => {
         <div className="flex gap-4">
           <button
             onClick={() => {
-              // Set state back to IDLE to configure and start again
-              useTrainerStore.setState({ sessionState: 'IDLE' });
+              resetToIdle();
+              (document.activeElement as HTMLElement)?.blur();
             }}
             className="flex-1 py-3 bg-success-green hover:bg-success-green/90 text-terminal-bg text-sm font-black font-mono tracking-wider cursor-pointer border-0 uppercase text-center"
           >
@@ -424,9 +653,9 @@ export const Trainer: React.FC = () => {
           </button>
           <button
             onClick={() => {
-              // Set state back to IDLE and navigate to analytics page
-              useTrainerStore.setState({ sessionState: 'IDLE' });
+              resetToIdle();
               setView('analytics');
+              (document.activeElement as HTMLElement)?.blur();
             }}
             className="flex-1 py-3 bg-terminal-border hover:bg-terminal-border/80 border border-terminal-border text-terminal-text text-sm font-bold font-mono tracking-wider cursor-pointer uppercase text-center"
           >
@@ -440,8 +669,6 @@ export const Trainer: React.FC = () => {
   // --- 3. ACTIVE RUN VIEW: RUNNING OR PAUSED ---
   if (!currentPrompt) return null;
   const { action, ecn, priceAdjustment } = currentPrompt;
-  const isBuy = action === 'BUY';
-  const targetInfo = getTargetKeyAndPresses(action, ecn, keyBindings);
 
   // Compute active ECN based on sequence
   let resolvedEcn: ECN | null = null;
@@ -472,40 +699,44 @@ export const Trainer: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto space-y-5 animate-fadeIn relative">
-      {/* Top Session Control Bar */}
+    <div key="trainer-active" className="w-full max-w-4xl mx-auto space-y-5 animate-fadeIn relative">
       <div className="bg-terminal-panel border border-terminal-border p-3.5 flex justify-between items-center text-xs font-mono">
-        <div className="flex gap-4 text-terminal-muted">
+        <div className="flex gap-4 text-terminal-muted flex-wrap">
           <span>PROGRESS: <strong className="text-terminal-text">{sessionLength > 0 ? `${currentSessionEvents.length + 1} / ${sessionLength}` : `${currentSessionEvents.length + 1} (Infinite)`}</strong></span>
           <span>MODE: <strong className="text-terminal-text uppercase">{mode}</strong></span>
           <span>PRICE: <strong className="text-terminal-text">{priceTrainingEnabled ? 'ON' : 'OFF'}</strong></span>
-          <span>EXAM: <strong className="text-terminal-text">{examModeEnabled ? 'ACTIVE' : 'OFF'}</strong></span>
+          {practiceModeType === 'time_limit' && (
+            <span>LIMIT: <strong className="text-warning-amber">{(currentTimeLimitMs / 1000).toFixed(2)}s</strong></span>
+          )}
+          {practiceModeType === 'time_limit' && adaptivePacingEnabled && (
+            <span>STREAK: <strong className="text-success-green">{consecutiveCorrectCount}</strong></span>
+          )}
         </div>
         <div className="flex gap-2.5">
           {sessionState === 'RUNNING' ? (
             <button
-              onClick={pauseSession}
-              disabled={examModeEnabled}
+              onClick={() => { pauseSession(); (document.activeElement as HTMLElement)?.blur(); }}
+              disabled={countdownRemaining !== null}
               className="px-3 py-1 bg-warning-amber/10 border border-warning-amber/30 hover:bg-warning-amber/20 text-warning-amber font-mono text-[11px] uppercase cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Pause
             </button>
           ) : (
             <button
-              onClick={resumeSession}
+              onClick={() => { resumeSession(); (document.activeElement as HTMLElement)?.blur(); }}
               className="px-3 py-1 bg-success-green/10 border border-success-green/30 hover:bg-success-green/20 text-success-green font-mono text-[11px] uppercase cursor-pointer"
             >
               Resume
             </button>
           )}
           <button
-            onClick={resetSession}
+            onClick={() => { resetSession(); (document.activeElement as HTMLElement)?.blur(); }}
             className="px-3 py-1 bg-terminal-border hover:bg-terminal-border/80 border border-terminal-border text-terminal-text font-mono text-[11px] uppercase cursor-pointer"
           >
             Reset
           </button>
           <button
-            onClick={() => endSession(false)}
+            onClick={() => { endSession(false); (document.activeElement as HTMLElement)?.blur(); }}
             className="px-3 py-1 bg-error-red/10 border border-error-red/30 hover:bg-error-red/20 text-error-red font-mono text-[11px] uppercase cursor-pointer"
           >
             End Session
@@ -513,43 +744,59 @@ export const Trainer: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Focus Training Layout Chamber */}
+      {/* Progress Bar for Time Limit Mode */}
+      {practiceModeType === 'time_limit' && countdownRemaining === null && (
+        <div key="progress-bar-container" className="w-full h-1.5 bg-terminal-border overflow-hidden">
+          <div key="progress-bar-el" ref={progressBarRef} className="h-full bg-success-green w-full" style={{ transition: 'width 0.05s linear' }} />
+        </div>
+      )}
+
+      {/* Main Target ECN Training Layout Chamber */}
       <div className="bg-terminal-panel border border-terminal-border p-8 min-h-[360px] flex flex-col justify-between relative">
-        <div className={`absolute top-0 left-0 right-0 h-1 ${isBuy ? 'bg-info-blue' : 'bg-error-red'}`} />
 
         {/* 1. Large Prompt Element (Dominates Screen) */}
-        <div className="text-center py-8 space-y-4 select-none font-mono">
-          <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white uppercase">
-            {action} {ecn}
-          </h1>
-
-          {priceTrainingEnabled && priceAdjustment !== undefined && (
-            <div className={`text-4xl md:text-5xl font-black ${priceAdjustment > 0 ? 'text-success-green' : 'text-error-red'}`}>
-              {priceAdjustment > 0 ? `+${priceAdjustment}` : priceAdjustment}¢
+        <div className="text-center py-8 space-y-4 select-none font-mono flex flex-col items-center justify-center min-h-[160px]">
+          {countdownRemaining !== null ? (
+            <div className="space-y-2">
+              <span className="text-[10px] text-terminal-muted uppercase tracking-widest block font-bold">GET READY</span>
+              <h1 className="text-6xl md:text-7xl font-black text-warning-amber animate-pulse">
+                {countdownRemaining}
+              </h1>
             </div>
+          ) : (
+            <>
+              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white uppercase">
+                {action} {ecn}
+              </h1>
+
+              {priceTrainingEnabled && priceAdjustment !== undefined && (
+                <div className={`text-4xl md:text-5xl font-black ${priceAdjustment > 0 ? 'text-success-green' : 'text-error-red'}`}>
+                  {priceAdjustment > 0 ? `+${priceAdjustment}` : priceAdjustment}¢
+                </div>
+              )}
+            </>
           )}
         </div>
 
         {/* 2. Live Input buffer */}
         <div className="bg-terminal-bg border border-terminal-border p-4 space-y-3 relative">
-          <div className="flex justify-between items-center text-[10px] font-mono text-terminal-muted uppercase border-b border-terminal-border pb-1">
-            <span>LIVE INPUT SEQUENCE</span>
-            <span>CLOCK</span>
-          </div>
-
-          <div className="flex justify-between items-center py-1">
-            <div className="font-mono">
+          <div className="grid grid-cols-3 gap-4 items-center py-1">
+            {/* Column 1: Left - Keyboard Keystroke Buffer */}
+            <div className="font-mono text-left">
+              <span className="text-[9px] text-terminal-muted uppercase block border-b border-terminal-border/20 pb-0.5 mb-1.5">LIVE INPUT SEQUENCE</span>
               <div className="flex items-center gap-2 min-h-[32px]">
-                {inputSequence.length === 0 ? (
-                  <span className="text-sm text-terminal-muted italic">HOLD SHIFT + PRESS ROUTE KEY</span>
+                {countdownRemaining !== null ? (
+                  <span className="text-[10px] text-warning-amber italic font-bold">WAITING...</span>
+                ) : inputSequence.length === 0 ? (
+                  <span className="text-[10px] text-terminal-muted italic">HOLD SHIFT + PRESS KEY</span>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5 items-center">
-                    <span className="px-2 py-1 bg-terminal-border text-xs font-bold text-terminal-text">SHIFT</span>
-                    <span className="text-terminal-muted text-xs font-bold">+</span>
+                  <div className="flex flex-wrap gap-1 items-center">
+                    <span className="px-1.5 py-0.5 bg-terminal-border text-[10px] font-bold text-terminal-text">SHIFT</span>
+                    <span className="text-terminal-muted text-[10px] font-bold">+</span>
                     {inputSequence.map((code, idx) => (
                       <React.Fragment key={idx}>
-                        {idx > 0 && <span className="text-terminal-muted text-xs font-bold">+</span>}
-                        <span className="px-2 py-1 bg-terminal-border text-xs font-bold text-info-blue">
+                        {idx > 0 && <span className="text-terminal-muted text-[10px] font-bold">+</span>}
+                        <span className="px-1.5 py-0.5 bg-terminal-border text-[10px] font-bold text-info-blue">
                           {formatInputKeyName(code)}
                         </span>
                       </React.Fragment>
@@ -557,22 +804,36 @@ export const Trainer: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div className="text-xs text-terminal-muted mt-2 font-bold">
-                {resolvedEcn ? (
-                  <span className={resolvedEcn === ecn ? 'text-success-green' : 'text-error-red'}>
-                    RESOLVED TARGET: {resolvedEcn} ({pressCount} presses)
+            </div>
+
+            {/* Column 2: Center - Resolved Target (ONLY ECN name, centered, text-2xl md:text-3xl font-black text-white) */}
+            <div className="font-mono text-center flex flex-col justify-center items-center">
+              <span className="text-[9px] text-terminal-muted uppercase block border-b border-terminal-border/20 pb-0.5 mb-1.5">RESOLVED ROUTE</span>
+              <div className="min-h-[32px] flex items-center justify-center">
+                {countdownRemaining !== null ? (
+                  <span className="text-[10px] text-terminal-muted uppercase tracking-wider font-semibold">LOCKED</span>
+                ) : resolvedEcn ? (
+                  <span className="text-2xl md:text-3xl font-black text-white uppercase tracking-wider">
+                    {resolvedEcn}
+                  </span>
+                ) : inputSequence.length > 0 ? (
+                  <span className="text-2xl md:text-3xl font-black text-white uppercase tracking-wider">
+                    INVALID ({inputSequence.map(formatInputKeyName).join('+')})
                   </span>
                 ) : (
-                  <span>NO ROUTE ACTIVE</span>
+                  <span className="text-2xl md:text-3xl font-black text-terminal-muted uppercase tracking-wider">—</span>
                 )}
               </div>
             </div>
 
-            {/* Live Clock Ticker */}
-            <div>
-              <span ref={timerRef} className="text-2xl md:text-3xl font-black font-mono text-terminal-text">
-                0.000s
-              </span>
+            {/* Column 3: Right - Live Clock Ticker */}
+            <div className="font-mono text-right flex flex-col justify-end items-end">
+              <span className="text-[9px] text-terminal-muted uppercase block border-b border-terminal-border/20 pb-0.5 mb-1.5 w-full">CLOCK</span>
+              <div className="min-h-[32px] flex items-center justify-end">
+                <span ref={timerRef} className="text-2xl md:text-3xl font-black text-terminal-text tracking-wide">
+                  0.000s
+                </span>
+              </div>
             </div>
           </div>
 
@@ -592,54 +853,24 @@ export const Trainer: React.FC = () => {
           )}
         </div>
 
-        {/* 3. Result / Feedback Overlay */}
-        {!examModeEnabled && feedback && (
-          <div className="absolute inset-0 bg-terminal-bg border border-terminal-border flex flex-col items-center justify-center gap-4 z-20">
-            <h3 className={`text-2xl font-black font-mono tracking-widest ${feedback.correct ? 'text-success-green' : 'text-error-red'}`}>
-              {feedback.correct ? 'CORRECT EXECUTION' : 'EXECUTION FAILURE'}
-            </h3>
-            <div className="bg-terminal-panel border border-terminal-border p-4 space-y-2 text-xs font-mono text-left w-80">
-              <div className="flex justify-between">
-                <span className="text-terminal-muted">Expected ECN:</span>
-                <span className="text-success-green font-bold">
-                  {feedback.expectedEcn} {targetInfo ? `(Shift+${formatInputKeyName(targetInfo.key)} x${targetInfo.expectedPresses})` : ''}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-terminal-muted">Resolved Input:</span>
-                <span className={`font-bold ${feedback.expectedEcn === feedback.actualEcn ? 'text-success-green' : 'text-error-red'}`}>
-                  {feedback.actualEcn}
-                </span>
-              </div>
-              {priceTrainingEnabled && (
-                <>
-                  <div className="flex justify-between border-t border-terminal-border pt-2 mt-2">
-                    <span className="text-terminal-muted">Expected Price:</span>
-                    <span className="text-success-green font-bold">
-                      {feedback.expectedPrice !== undefined && feedback.expectedPrice > 0 ? '+' : ''}
-                      {feedback.expectedPrice}¢
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-terminal-muted">Your Price Entry:</span>
-                    <span className={`font-bold ${feedback.priceCorrect ? 'text-success-green' : 'text-error-red'}`}>
-                      {feedback.actualPrice !== undefined && feedback.actualPrice > 0 ? '+' : ''}
-                      {feedback.actualPrice}¢
-                    </span>
-                  </div>
-                </>
-              )}
-              <div className="flex justify-between border-t border-terminal-border pt-2 mt-2 text-terminal-muted">
-                <span>Latency:</span>
-                <span>{(feedback.reactionTimeMs / 1000).toFixed(3)}s</span>
-              </div>
-            </div>
+        {/* 3. Simple, Non-Distracting Result / Feedback Status Line */}
+        {feedback && (
+          <div className="mt-2.5 py-2 px-3 border border-terminal-border bg-terminal-bg flex justify-between items-center text-xs font-mono">
+            <span className={`font-black uppercase tracking-wider ${feedback.correct ? 'text-success-green' : 'text-error-red'}`}>
+              {feedback.isTimeout ? 'TIMEOUT (MISSED PRINT)' : feedback.correct ? 'CORRECT EXECUTION' : 'EXECUTION FAILURE'}
+            </span>
+            <span className="text-terminal-muted text-[10px]">
+              {feedback.correct 
+                ? `LATENCY: ${(feedback.reactionTimeMs / 1000).toFixed(3)}s`
+                : `EXPECTED: ${feedback.expectedEcn} ${priceTrainingEnabled && feedback.expectedPrice !== undefined ? `at ${feedback.expectedPrice > 0 ? '+' : ''}${feedback.expectedPrice}¢` : ''}`
+              }
+            </span>
           </div>
         )}
 
         {/* 4. Pause Status Overlay */}
         {sessionState === 'PAUSED' && (
-          <div className="absolute inset-0 bg-terminal-bg/80 border border-terminal-border flex flex-col items-center justify-center gap-3 z-10">
+          <div className="absolute inset-0 bg-terminal-bg/85 border border-terminal-border flex flex-col items-center justify-center gap-3 z-10">
             <h3 className="text-2xl font-black font-mono tracking-widest text-warning-amber">
               SESSION PAUSED
             </h3>
@@ -651,26 +882,24 @@ export const Trainer: React.FC = () => {
       </div>
 
       {/* Control Layout Hints */}
-      {!examModeEnabled && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-xs font-mono text-terminal-muted">
-          <div className="bg-terminal-panel border border-terminal-border p-2">
-            <span className="text-[9px] block uppercase text-terminal-muted/60">SUBMIT</span>
-            <span className="text-terminal-text font-bold uppercase">{submissionMethod}</span>
-          </div>
-          <div className="bg-terminal-panel border border-terminal-border p-2">
-            <span className="text-[9px] block uppercase text-terminal-muted/60">RESET STROKE</span>
-            <span className="text-terminal-text font-bold">SPACE</span>
-          </div>
-          <div className="bg-terminal-panel border border-terminal-border p-2">
-            <span className="text-[9px] block uppercase text-terminal-muted/60">CLEAR ALL</span>
-            <span className="text-terminal-text font-bold uppercase">{cancelMethod}</span>
-          </div>
-          <div className="bg-terminal-panel border border-terminal-border p-2">
-            <span className="text-[9px] block uppercase text-terminal-muted/60">PRICE SCALE</span>
-            <span className="text-terminal-text font-bold">← / →</span>
-          </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-xs font-mono text-terminal-muted">
+        <div className="bg-terminal-panel border border-terminal-border p-2">
+          <span className="text-[9px] block uppercase text-terminal-muted/60">SUBMIT</span>
+          <span className="text-terminal-text font-bold uppercase">{submissionMethod}</span>
         </div>
-      )}
+        <div className="bg-terminal-panel border border-terminal-border p-2">
+          <span className="text-[9px] block uppercase text-terminal-muted/60">RESET STROKE</span>
+          <span className="text-terminal-text font-bold">SPACE</span>
+        </div>
+        <div className="bg-terminal-panel border border-terminal-border p-2">
+          <span className="text-[9px] block uppercase text-terminal-muted/60">CLEAR ALL</span>
+          <span className="text-terminal-text font-bold uppercase">{cancelMethod}</span>
+        </div>
+        <div className="bg-terminal-panel border border-terminal-border p-2">
+          <span className="text-[9px] block uppercase text-terminal-muted/60">PRICE SCALE</span>
+          <span className="text-terminal-text font-bold">← / →</span>
+        </div>
+      </div>
 
       {/* 5. Session Stats (Audit log) */}
       <div className="bg-terminal-panel border border-terminal-border p-4 font-mono text-lg md:text-xl text-terminal-text flex justify-between items-center">

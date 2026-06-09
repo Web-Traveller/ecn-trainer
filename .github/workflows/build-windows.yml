@@ -8,6 +8,8 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout repository
@@ -35,6 +37,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tauriScript: npx tauri
+          tagName: v__VERSION__
+          releaseName: "ECN Execution Trainer v__VERSION__"
+          releaseBody: "Release v__VERSION__ of ECN Execution Trainer"
+          releaseDraft: true
+          prerelease: false
 
       - name: Upload Windows installer artifacts
         uses: actions/upload-artifact@v4

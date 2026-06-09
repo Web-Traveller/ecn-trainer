@@ -3,14 +3,14 @@ import { useTrainerStore } from './store/trainerStore';
 import { Dashboard } from './components/Dashboard';
 import { Trainer } from './components/Trainer';
 import { Analytics } from './components/Analytics';
-import { HistoryList } from './components/HistoryList';
 import { Settings } from './components/Settings';
-import { Docs } from './components/Docs';
 
 export const App: React.FC = () => {
   const currentView = useTrainerStore((state) => state.currentView);
   const sessionState = useTrainerStore((state) => state.sessionState);
   const setView = useTrainerStore((state) => state.setView);
+
+
 
   return (
     <div className="min-h-screen bg-terminal-bg text-terminal-text flex flex-col font-sans selection:bg-terminal-border selection:text-terminal-text">
@@ -20,7 +20,7 @@ export const App: React.FC = () => {
           <div className="flex items-center gap-6">
             <span className="font-bold font-mono tracking-wider text-terminal-text flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 bg-info-blue inline-block"></span>
-              ECN EXECUTION TERMINAL v1.2
+              ECN EXECUTION TERMINAL v2.0
             </span>
             <nav className="flex items-center border-l border-terminal-border pl-6 gap-2">
               <button
@@ -44,13 +44,7 @@ export const App: React.FC = () => {
               >
                 [03] Analytics
               </button>
-              <button
-                onClick={() => setView('history')}
-                className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${currentView === 'history' ? 'bg-terminal-border border-terminal-border text-white' : 'border-transparent text-terminal-muted'
-                  }`}
-              >
-                [04] History
-              </button>
+              {/* [04] History hidden temporarily */}
               <button
                 onClick={() => setView('settings')}
                 className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${currentView === 'settings' ? 'bg-terminal-border border-terminal-border text-white' : 'border-transparent text-terminal-muted'
@@ -58,13 +52,7 @@ export const App: React.FC = () => {
               >
                 [05] Settings
               </button>
-              <button
-                onClick={() => setView('docs')}
-                className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${currentView === 'docs' ? 'bg-terminal-border border-terminal-border text-white' : 'border-transparent text-terminal-muted'
-                  }`}
-              >
-                [06] Docs
-              </button>
+              {/* [06] Docs hidden temporarily */}
             </nav>
           </div>
 
@@ -108,9 +96,7 @@ export const App: React.FC = () => {
         {currentView === 'dashboard' && <Dashboard />}
         {currentView === 'trainer' && <Trainer />}
         {currentView === 'analytics' && <Analytics />}
-        {currentView === 'history' && <HistoryList />}
         {currentView === 'settings' && <Settings />}
-        {currentView === 'docs' && <Docs />}
       </main>
 
       {/* Bottom Terminal Status Ticker */}

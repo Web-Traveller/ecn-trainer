@@ -9,18 +9,23 @@ export interface AppSettings {
   mode: 'buy_only' | 'sell_only' | 'mixed';
   priceTrainingEnabled: boolean;
   smartLearningEnabled: boolean;
-  examModeEnabled: boolean;
-  focusDrillEnabled: boolean;
-  focusDrillEcns: ECN[];
+  targetEcnModeEnabled: boolean;
+  targetEcns: ECN[];
   sessionLength: number;
   submissionMethod: 'Enter' | 'ShiftEnter';
   cancelMethod: 'Escape' | 'ShiftEscape';
   keyBindings: KeyBindings;
-  soundEnabled: boolean;
   trackResets: boolean;
   trackOvershoots: boolean;
   trackRecoveries: boolean;
   maxPriceAdjustment: 1 | 3 | 5 | 10;
+  practiceModeType: 'stable' | 'time_limit';
+  adaptivePacingEnabled: boolean;
+  feedbackDelayMs: number;
+  initialTimeLimitMs: number;
+  speedDecayMs: number;
+  speedPenaltyMs: number;
+  targetStreakLength: number;
 }
 
 const DEFAULT_BINDINGS: KeyBindings = {
@@ -41,18 +46,23 @@ const DEFAULT_SETTINGS: AppSettings = {
   mode: 'mixed',
   priceTrainingEnabled: false,
   smartLearningEnabled: true,
-  examModeEnabled: false,
-  focusDrillEnabled: false,
-  focusDrillEcns: [],
+  targetEcnModeEnabled: false,
+  targetEcns: ['NSDQ'],
   sessionLength: 20,
   submissionMethod: 'Enter',
   cancelMethod: 'Escape',
   keyBindings: DEFAULT_BINDINGS,
-  soundEnabled: true,
   trackResets: true,
   trackOvershoots: true,
   trackRecoveries: true,
-  maxPriceAdjustment: 5
+  maxPriceAdjustment: 5,
+  practiceModeType: 'stable',
+  adaptivePacingEnabled: true,
+  feedbackDelayMs: 500,
+  initialTimeLimitMs: 2000,
+  speedDecayMs: 50,
+  speedPenaltyMs: 100,
+  targetStreakLength: 3
 };
 
 export function saveSessionsToStorage(sessions: Session[]): void {

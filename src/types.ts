@@ -44,7 +44,6 @@ export interface Session {
   mode: 'buy_only' | 'sell_only' | 'mixed';
   priceTrainingEnabled: boolean;
   smartLearningEnabled: boolean;
-  examModeEnabled: boolean;
   accuracy: number;           // Final overall percentage (0-100)
   averageTime: number;        // In milliseconds
   events: SessionEvent[];
@@ -56,6 +55,18 @@ export interface Session {
   resetCount?: number;
   priceAccuracy?: number;
   mistakeMatrix?: { expected: ECN; actual: string; count: number }[];
+
+  // Session-specific configuration details
+  targetEcnModeEnabled?: boolean;
+  targetEcn?: ECN | null;
+  targetEcns?: ECN[];
+  practiceModeType?: 'stable' | 'time_limit';
+  initialTimeLimitMs?: number;
+  speedDecayMs?: number;
+  speedPenaltyMs?: number;
+  targetStreakLength?: number;
+  repetitionThreshold?: number;
+  sessionDurationMs?: number; // Total active time taken to complete session
 }
 
 export interface ECNWeightMap {

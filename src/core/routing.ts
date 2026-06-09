@@ -93,6 +93,15 @@ export function processInput(
     else if (activeKeyCode === bindings.sellGroupX) activeGroup = 'GroupX';
   }
 
+  // Fallback to check the opposite action's bindings if not found
+  if (!activeGroup) {
+    if (activeKeyCode === bindings.buyGroupA || activeKeyCode === bindings.sellGroupA) activeGroup = 'GroupA';
+    else if (activeKeyCode === bindings.buyGroupS || activeKeyCode === bindings.sellGroupS) activeGroup = 'GroupS';
+    else if (activeKeyCode === bindings.buyGroupD || activeKeyCode === bindings.sellGroupD) activeGroup = 'GroupD';
+    else if (activeKeyCode === bindings.buyGroupZ || activeKeyCode === bindings.sellGroupZ) activeGroup = 'GroupZ';
+    else if (activeKeyCode === bindings.buyGroupX || activeKeyCode === bindings.sellGroupX) activeGroup = 'GroupX';
+  }
+
   if (!activeGroup || pressCount <= 0) {
     return {
       currentEcn: null,

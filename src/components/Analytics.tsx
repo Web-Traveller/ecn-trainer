@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useTrainerStore } from '../store/trainerStore';
 import { calculateCumulativeStats } from '../core/analytics';
 import { Heatmap } from './Heatmap';
@@ -9,13 +9,11 @@ export const Analytics: React.FC = () => {
 
   const [selectedSessionId, setSelectedSessionId] = useState<string>('');
 
-  useEffect(() => {
-    if (sessions.length > 0 && (!selectedSessionId || !sessions.some(s => s.id === selectedSessionId))) {
-      setSelectedSessionId(sessions[0].id);
-    }
-  }, [sessions, selectedSessionId]);
+  const activeSessionId = sessions.some(s => s.id === selectedSessionId)
+    ? selectedSessionId
+    : (sessions.length > 0 ? sessions[0].id : '');
 
-  const selectedSession = sessions.find((s) => s.id === selectedSessionId) || sessions[0];
+  const selectedSession = sessions.find((s) => s.id === activeSessionId);
   const stats = selectedSession ? calculateCumulativeStats([selectedSession]) : calculateCumulativeStats([]);
 
   const formatDate = (isoString: string) => {
@@ -45,7 +43,7 @@ export const Analytics: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono text-terminal-muted uppercase">Select Session:</span>
               <select
-                value={selectedSessionId}
+                value={activeSessionId}
                 onChange={(e) => setSelectedSessionId(e.target.value)}
                 className="bg-terminal-bg border border-terminal-border text-xs py-1 px-2 text-terminal-text font-mono focus:outline-none focus:border-info-blue"
               >
@@ -105,6 +103,77 @@ export const Analytics: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* Session Setup & Configuration Audit Panel */}
+          {selectedSession && (
+            <div className="bg-terminal-panel border border-terminal-border p-4 space-y-3 font-mono text-xs animate-fadeIn">
+              <h3 className="text-xs font-bold text-terminal-text uppercase tracking-wider border-b border-terminal-border pb-2">
+                SESSION SETUP & CONFIGURATION AUDIT
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-1">
+                <div>
+                  <span className="text-[10px] text-terminal-muted uppercase block">Total Session Time</span>
+                  <strong className="text-terminal-text">
+                    {selectedSession.sessionDurationMs 
+                      ? `${(selectedSession.sessionDurationMs / 1000).toFixed(1)}s` 
+                      : '—'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-terminal-muted uppercase block">Prompt Count</span>
+                  <strong className="text-terminal-text">
+                    {selectedSession.events.length} prompts
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-terminal-muted uppercase block">Target ECN Mode</span>
+                  <strong className={selectedSession.targetEcnModeEnabled ? 'text-info-blue' : 'text-terminal-muted'}>
+                    {selectedSession.targetEcnModeEnabled 
+                      ? `ENABLED (${selectedSession.targetEcns && selectedSession.targetEcns.length > 0 ? selectedSession.targetEcns.join(', ') : (selectedSession.targetEcn || 'NSDQ')})` 
+                      : 'DISABLED'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-terminal-muted uppercase block">Price Training Mode</span>
+                  <strong className={selectedSession.priceTrainingEnabled ? 'text-success-green' : 'text-terminal-muted'}>
+                    {selectedSession.priceTrainingEnabled ? 'ENABLED' : 'DISABLED'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-terminal-muted uppercase block">Practice Mode Type</span>
+                  <strong className="text-terminal-text uppercase">
+                    {selectedSession.practiceModeType === 'time_limit' ? 'Time-Limit (Speed)' : 'Stable (Accuracy)'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-terminal-muted uppercase block">Pacing Rules</span>
+                  <span className="text-[11px] text-terminal-text block mt-0.5">
+                    {selectedSession.practiceModeType === 'time_limit' ? (
+                      <>
+                        Init Limit: {((selectedSession.initialTimeLimitMs ?? 2000) / 1000).toFixed(1)}s | 
+                        Decay: {selectedSession.speedDecayMs ?? 50}ms | 
+                        Penalty: {selectedSession.speedPenaltyMs ?? 100}ms
+                      </>
+                    ) : (
+                      'N/A (Stable Mode)'
+                    )}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-terminal-muted uppercase block">Smart Learning</span>
+                  <strong className={selectedSession.smartLearningEnabled ? 'text-success-green' : 'text-terminal-muted'}>
+                    {selectedSession.smartLearningEnabled ? 'ENABLED' : 'DISABLED'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-terminal-muted uppercase block">Repetition Threshold</span>
+                  <strong className="text-terminal-text">
+                    {selectedSession.repetitionThreshold ? `${selectedSession.repetitionThreshold}x` : '2x'}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Grid maps / heat map */}
           <div className="bg-terminal-panel border border-terminal-border p-4">

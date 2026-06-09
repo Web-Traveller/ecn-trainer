@@ -8,6 +8,7 @@ export function useKeyboard() {
   const submissionMethod = useTrainerStore((state) => state.submissionMethod);
   const cancelMethod = useTrainerStore((state) => state.cancelMethod);
   const keyBindings = useTrainerStore((state) => state.keyBindings);
+  const countdownRemaining = useTrainerStore((state) => state.countdownRemaining);
 
   const pressRouteKey = useTrainerStore((state) => state.pressRouteKey);
   const adjustPrice = useTrainerStore((state) => state.adjustPrice);
@@ -17,7 +18,7 @@ export function useKeyboard() {
   const setDebugInfo = useTrainerStore((state) => state.setDebugInfo);
 
   useEffect(() => {
-    if (sessionState !== 'RUNNING' || !currentPrompt) return;
+    if (sessionState !== 'RUNNING' || !currentPrompt || countdownRemaining !== null) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Keep track of the latest key pressed for debug purposes
@@ -74,27 +75,19 @@ export function useKeyboard() {
       // 5. Route key checks (requires Shift modifier)
       if (!e.shiftKey) return;
 
-      const action = currentPrompt.action;
-      const validCodes = action === 'BUY' 
-        ? [
-            keyBindings.buyGroupA,
-            keyBindings.buyGroupS,
-            keyBindings.buyGroupD,
-            keyBindings.buyGroupZ,
-            keyBindings.buyGroupX
-          ]
-        : [
-            keyBindings.sellGroupA,
-            keyBindings.sellGroupS,
-            keyBindings.sellGroupD,
-            keyBindings.sellGroupZ,
-            keyBindings.sellGroupX
-          ];
+      const ignoredCodes = [
+        'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 
+        'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight', 
+        'CapsLock', 'Tab', 'Backspace', 'Enter', 'Escape', 'Space',
+        'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+        'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
+        'NumLock', 'ScrollLock'
+      ];
 
-      if (validCodes.includes(e.code)) {
-        e.preventDefault();
-        pressRouteKey(e.code);
-      }
+      if (ignoredCodes.includes(e.code)) return;
+
+      e.preventDefault();
+      pressRouteKey(e.code);
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -108,6 +101,7 @@ export function useKeyboard() {
     submissionMethod,
     cancelMethod,
     keyBindings,
+    countdownRemaining,
     pressRouteKey,
     adjustPrice,
     submitAnswer,
