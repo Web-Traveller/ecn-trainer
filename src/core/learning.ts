@@ -1,11 +1,9 @@
 import type { ECN, ECNWeightMap, Session, SessionEvent } from '../types';
 
 export const ALL_ECNS: ECN[] = [
-  'NSDQ', 'ARCA', 'EDGX', 'EDGA',
-  'NYSE', 'NSEX', 'IEX',
-  'CHX', 'PHLX',
-  'MEMX', 'MIAX', 'AMEX',
-  'BATS', 'BATY', 'BOSX'
+  'NSDQ', 'ARCA', 'EDGX', 'EDGA', 'IEX',
+  'MEMX', 'MIAX', 'AMEX', 'CHSX', 'NSEX', 'PHLX',
+  'BATS', 'BATY', 'BOSX', 'NYSE'
 ];
 
 /**

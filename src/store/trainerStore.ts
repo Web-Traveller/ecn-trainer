@@ -355,11 +355,13 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
     currentSessionEvents.forEach((e) => {
       if (!e.correct) {
         const actualVal = e.actualEcn || 'None';
-        const key = `${e.expectedEcn} -> ${actualVal}`;
-        if (!mistakeCounts[key]) {
-          mistakeCounts[key] = { expected: e.expectedEcn, actual: actualVal, count: 0 };
+        if (e.expectedEcn !== actualVal) {
+          const key = `${e.expectedEcn} -> ${actualVal}`;
+          if (!mistakeCounts[key]) {
+            mistakeCounts[key] = { expected: e.expectedEcn, actual: actualVal, count: 0 };
+          }
+          mistakeCounts[key].count += 1;
         }
-        mistakeCounts[key].count += 1;
       }
     });
     const mistakeMatrix = Object.values(mistakeCounts).sort((a, b) => b.count - a.count);
@@ -606,8 +608,8 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
     const ecnCorrect = (() => {
       if (!activeRouteKey || !resolvedEcn) return false;
       const validCodesForAction = currentPrompt.action === 'BUY'
-        ? [keyBindings.buyGroupA, keyBindings.buyGroupS, keyBindings.buyGroupD, keyBindings.buyGroupZ, keyBindings.buyGroupX]
-        : [keyBindings.sellGroupA, keyBindings.sellGroupS, keyBindings.sellGroupD, keyBindings.sellGroupZ, keyBindings.sellGroupX];
+        ? [keyBindings.buyGroup1, keyBindings.buyGroup2, keyBindings.buyGroup3]
+        : [keyBindings.sellGroup1, keyBindings.sellGroup2, keyBindings.sellGroup3];
       return validCodesForAction.includes(activeRouteKey) && resolvedEcn === currentPrompt.ecn;
     })();
     const priceCorrect = priceTrainingEnabled ? (userPriceAdjustment === currentPrompt.priceAdjustment) : true;

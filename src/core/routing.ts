@@ -1,36 +1,28 @@
 import type { ECN, ActionType, InputMetrics, KeyBindings } from '../types';
 
 export const DEFAULT_BINDINGS: KeyBindings = {
-  buyGroupA: 'KeyA',
-  buyGroupS: 'KeyS',
-  buyGroupD: 'KeyD',
-  buyGroupZ: 'KeyZ',
-  buyGroupX: 'KeyX',
+  buyGroup1: 'KeyA',
+  buyGroup2: 'KeyZ',
+  buyGroup3: 'KeyQ',
 
-  sellGroupA: 'KeyL',
-  sellGroupS: 'Semicolon',
-  sellGroupD: 'Quote',
-  sellGroupZ: 'Comma',
-  sellGroupX: 'Period'
+  sellGroup1: 'KeyD',
+  sellGroup2: 'KeyC',
+  sellGroup3: 'KeyE'
 };
 
 export const ECN_GROUP_LISTS = {
-  GroupA: ['NSDQ', 'ARCA', 'EDGX', 'EDGA'] as ECN[],
-  GroupS: ['NYSE', 'NSEX', 'IEX'] as ECN[],
-  GroupD: ['CHX', 'PHLX'] as ECN[],
-  GroupZ: ['MEMX', 'MIAX', 'AMEX'] as ECN[],
-  GroupX: ['BATS', 'BATY', 'BOSX'] as ECN[]
+  Group1: ['NSDQ', 'ARCA', 'EDGX', 'EDGA', 'IEX'] as ECN[],
+  Group2: ['MEMX', 'MIAX', 'AMEX', 'CHSX', 'NSEX', 'PHLX'] as ECN[],
+  Group3: ['BATS', 'BATY', 'BOSX', 'NYSE'] as ECN[]
 };
 
 /**
- * Identifies which of the 5 group indices an ECN belongs to.
+ * Identifies which of the 3 group indices an ECN belongs to.
  */
-export function getGroupForEcn(ecn: ECN): 'GroupA' | 'GroupS' | 'GroupD' | 'GroupZ' | 'GroupX' | null {
-  if (ECN_GROUP_LISTS.GroupA.includes(ecn)) return 'GroupA';
-  if (ECN_GROUP_LISTS.GroupS.includes(ecn)) return 'GroupS';
-  if (ECN_GROUP_LISTS.GroupD.includes(ecn)) return 'GroupD';
-  if (ECN_GROUP_LISTS.GroupZ.includes(ecn)) return 'GroupZ';
-  if (ECN_GROUP_LISTS.GroupX.includes(ecn)) return 'GroupX';
+export function getGroupForEcn(ecn: ECN): 'Group1' | 'Group2' | 'Group3' | null {
+  if (ECN_GROUP_LISTS.Group1.includes(ecn)) return 'Group1';
+  if (ECN_GROUP_LISTS.Group2.includes(ecn)) return 'Group2';
+  if (ECN_GROUP_LISTS.Group3.includes(ecn)) return 'Group3';
   return null;
 }
 
@@ -47,17 +39,13 @@ export function getTargetKeyAndPresses(
 
   let boundKey = '';
   if (action === 'BUY') {
-    if (group === 'GroupA') boundKey = bindings.buyGroupA;
-    else if (group === 'GroupS') boundKey = bindings.buyGroupS;
-    else if (group === 'GroupD') boundKey = bindings.buyGroupD;
-    else if (group === 'GroupZ') boundKey = bindings.buyGroupZ;
-    else if (group === 'GroupX') boundKey = bindings.buyGroupX;
+    if (group === 'Group1') boundKey = bindings.buyGroup1;
+    else if (group === 'Group2') boundKey = bindings.buyGroup2;
+    else if (group === 'Group3') boundKey = bindings.buyGroup3;
   } else {
-    if (group === 'GroupA') boundKey = bindings.sellGroupA;
-    else if (group === 'GroupS') boundKey = bindings.sellGroupS;
-    else if (group === 'GroupD') boundKey = bindings.sellGroupD;
-    else if (group === 'GroupZ') boundKey = bindings.sellGroupZ;
-    else if (group === 'GroupX') boundKey = bindings.sellGroupX;
+    if (group === 'Group1') boundKey = bindings.sellGroup1;
+    else if (group === 'Group2') boundKey = bindings.sellGroup2;
+    else if (group === 'Group3') boundKey = bindings.sellGroup3;
   }
 
   const ecns = ECN_GROUP_LISTS[group];
@@ -78,28 +66,22 @@ export function processInput(
 ): { currentEcn: ECN | null; metrics: InputMetrics } {
   const targetInfo = getTargetKeyAndPresses(action, targetEcn, bindings);
 
-  let activeGroup: 'GroupA' | 'GroupS' | 'GroupD' | 'GroupZ' | 'GroupX' | null = null;
+  let activeGroup: 'Group1' | 'Group2' | 'Group3' | null = null;
   if (action === 'BUY') {
-    if (activeKeyCode === bindings.buyGroupA) activeGroup = 'GroupA';
-    else if (activeKeyCode === bindings.buyGroupS) activeGroup = 'GroupS';
-    else if (activeKeyCode === bindings.buyGroupD) activeGroup = 'GroupD';
-    else if (activeKeyCode === bindings.buyGroupZ) activeGroup = 'GroupZ';
-    else if (activeKeyCode === bindings.buyGroupX) activeGroup = 'GroupX';
+    if (activeKeyCode === bindings.buyGroup1) activeGroup = 'Group1';
+    else if (activeKeyCode === bindings.buyGroup2) activeGroup = 'Group2';
+    else if (activeKeyCode === bindings.buyGroup3) activeGroup = 'Group3';
   } else {
-    if (activeKeyCode === bindings.sellGroupA) activeGroup = 'GroupA';
-    else if (activeKeyCode === bindings.sellGroupS) activeGroup = 'GroupS';
-    else if (activeKeyCode === bindings.sellGroupD) activeGroup = 'GroupD';
-    else if (activeKeyCode === bindings.sellGroupZ) activeGroup = 'GroupZ';
-    else if (activeKeyCode === bindings.sellGroupX) activeGroup = 'GroupX';
+    if (activeKeyCode === bindings.sellGroup1) activeGroup = 'Group1';
+    else if (activeKeyCode === bindings.sellGroup2) activeGroup = 'Group2';
+    else if (activeKeyCode === bindings.sellGroup3) activeGroup = 'Group3';
   }
 
   // Fallback to check the opposite action's bindings if not found
   if (!activeGroup) {
-    if (activeKeyCode === bindings.buyGroupA || activeKeyCode === bindings.sellGroupA) activeGroup = 'GroupA';
-    else if (activeKeyCode === bindings.buyGroupS || activeKeyCode === bindings.sellGroupS) activeGroup = 'GroupS';
-    else if (activeKeyCode === bindings.buyGroupD || activeKeyCode === bindings.sellGroupD) activeGroup = 'GroupD';
-    else if (activeKeyCode === bindings.buyGroupZ || activeKeyCode === bindings.sellGroupZ) activeGroup = 'GroupZ';
-    else if (activeKeyCode === bindings.buyGroupX || activeKeyCode === bindings.sellGroupX) activeGroup = 'GroupX';
+    if (activeKeyCode === bindings.buyGroup1 || activeKeyCode === bindings.sellGroup1) activeGroup = 'Group1';
+    else if (activeKeyCode === bindings.buyGroup2 || activeKeyCode === bindings.sellGroup2) activeGroup = 'Group2';
+    else if (activeKeyCode === bindings.buyGroup3 || activeKeyCode === bindings.sellGroup3) activeGroup = 'Group3';
   }
 
   if (!activeGroup || pressCount <= 0) {

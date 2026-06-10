@@ -116,11 +116,13 @@ export function calculateCumulativeStats(sessions: Session[]): CumulativeStats {
       ecnGroups[ecn].correctCount += 1;
     } else {
       const actualVal = e.actualEcn || 'None';
-      const key = `${e.expectedEcn} -> ${actualVal}`;
-      if (!mistakeCounts[key]) {
-        mistakeCounts[key] = { expected: e.expectedEcn, actual: actualVal, count: 0 };
+      if (e.expectedEcn !== actualVal) {
+        const key = `${e.expectedEcn} -> ${actualVal}`;
+        if (!mistakeCounts[key]) {
+          mistakeCounts[key] = { expected: e.expectedEcn, actual: actualVal as ECN, count: 0 };
+        }
+        mistakeCounts[key].count += 1;
       }
-      mistakeCounts[key].count += 1;
     }
   });
 

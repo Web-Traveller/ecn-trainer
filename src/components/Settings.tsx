@@ -39,11 +39,9 @@ export const Settings: React.FC = () => {
   };
 
   const bindingRows = [
-    { label: 'Group A (NSDQ / ARCA / EDGX / EDGA)', buyField: 'buyGroupA' as const, sellField: 'sellGroupA' as const },
-    { label: 'Group S (NYSE / NSEX / IEX)', buyField: 'buyGroupS' as const, sellField: 'sellGroupS' as const },
-    { label: 'Group D (CHX / PHLX)', buyField: 'buyGroupD' as const, sellField: 'sellGroupD' as const },
-    { label: 'Group Z (MEMX / MIAX / AMEX)', buyField: 'buyGroupZ' as const, sellField: 'sellGroupZ' as const },
-    { label: 'Group X (BATS / BATY / BOSX)', buyField: 'buyGroupX' as const, sellField: 'sellGroupX' as const }
+    { label: 'Group 1 (NSDQ / ARCA / EDGX / EDGA / IEX)', buyField: 'buyGroup1' as const, sellField: 'sellGroup1' as const },
+    { label: 'Group 2 (MEMX / MIAX / AMEX / CHSX / NSEX / PHLX)', buyField: 'buyGroup2' as const, sellField: 'sellGroup2' as const },
+    { label: 'Group 3 (BATS / BATY / BOSX / NYSE)', buyField: 'buyGroup3' as const, sellField: 'sellGroup3' as const }
   ];
 
   return (

@@ -4,6 +4,7 @@ import { initializeEcnWeights } from './learning';
 const SESSIONS_KEY = 'ecn_trainer_sessions';
 const WEIGHTS_KEY = 'ecn_trainer_weights';
 const SETTINGS_KEY = 'ecn_trainer_settings';
+const SETTINGS_VERSION = 2; // Bumped when keybinding schema changes
 
 export interface AppSettings {
   mode: 'buy_only' | 'sell_only' | 'mixed';
@@ -29,17 +30,13 @@ export interface AppSettings {
 }
 
 const DEFAULT_BINDINGS: KeyBindings = {
-  buyGroupA: 'KeyA',
-  buyGroupS: 'KeyS',
-  buyGroupD: 'KeyD',
-  buyGroupZ: 'KeyZ',
-  buyGroupX: 'KeyX',
+  buyGroup1: 'KeyA',
+  buyGroup2: 'KeyZ',
+  buyGroup3: 'KeyQ',
 
-  sellGroupA: 'KeyL',
-  sellGroupS: 'Semicolon',
-  sellGroupD: 'Quote',
-  sellGroupZ: 'Comma',
-  sellGroupX: 'Period'
+  sellGroup1: 'KeyD',
+  sellGroup2: 'KeyC',
+  sellGroup3: 'KeyE'
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -105,7 +102,7 @@ export function loadWeightsFromStorage(): ECNWeightMap {
 
 export function saveSettingsToStorage(settings: AppSettings): void {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings, _version: SETTINGS_VERSION }));
   } catch (error) {
     console.error('Failed to save settings to localStorage:', error);
   }
@@ -116,7 +113,31 @@ export function loadSettingsFromStorage(): AppSettings {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SETTINGS, ...parsed };
+
+    // Version check: if stored version doesn't match, wipe keybindings
+    if (parsed._version !== SETTINGS_VERSION) {
+      console.info('[ECN Trainer] Settings schema version mismatch — resetting keybindings to defaults.');
+      const migrated = { ...DEFAULT_SETTINGS, ...parsed, keyBindings: DEFAULT_BINDINGS, _version: SETTINGS_VERSION };
+      saveSettingsToStorage(migrated);
+      return migrated;
+    }
+
+    // Safely merge keyBindings to prevent old/missing keys from causing issues
+    const parsedBindings = parsed.keyBindings || {};
+    const keyBindings: KeyBindings = {
+      buyGroup1: parsedBindings.buyGroup1 || DEFAULT_SETTINGS.keyBindings.buyGroup1,
+      buyGroup2: parsedBindings.buyGroup2 || DEFAULT_SETTINGS.keyBindings.buyGroup2,
+      buyGroup3: parsedBindings.buyGroup3 || DEFAULT_SETTINGS.keyBindings.buyGroup3,
+      sellGroup1: parsedBindings.sellGroup1 || DEFAULT_SETTINGS.keyBindings.sellGroup1,
+      sellGroup2: parsedBindings.sellGroup2 || DEFAULT_SETTINGS.keyBindings.sellGroup2,
+      sellGroup3: parsedBindings.sellGroup3 || DEFAULT_SETTINGS.keyBindings.sellGroup3,
+    };
+
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      keyBindings
+    };
   } catch (error) {
     console.error('Failed to parse settings from localStorage:', error);
     return DEFAULT_SETTINGS;

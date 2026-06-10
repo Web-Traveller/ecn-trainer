@@ -137,7 +137,7 @@ export const Trainer: React.FC = () => {
   // Most common mistakes
   const mistakeCounts: { [key: string]: { expected: string; actual: string; count: number } } = {};
   currentSessionEvents.forEach((e) => {
-    if (!e.correct) {
+    if (!e.correct && e.expectedEcn !== e.actualEcn) {
       const key = `${e.expectedEcn}->${e.actualEcn}`;
       if (!mistakeCounts[key]) {
         mistakeCounts[key] = { expected: e.expectedEcn, actual: e.actualEcn, count: 0 };
