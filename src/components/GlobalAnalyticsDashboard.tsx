@@ -232,7 +232,7 @@ export const GlobalAnalyticsDashboard: React.FC = () => {
   const speedMax = speedData.length > 0 ? Math.max(1.5, Math.max(...speedData) + 0.2) : 3.0;
 
   return (
-    <div className="w-full space-y-5">
+    <div className="w-full space-y-5 font-mono">
       {/* 1. Dashboard Title banner */}
       <div className="bg-terminal-panel border border-terminal-border p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>

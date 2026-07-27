@@ -1,9 +1,18 @@
 export type ActionType = 'BUY' | 'SELL';
 
-export type ECN =
-  | 'NSDQ' | 'ARCA' | 'EDGX' | 'EDGA' | 'IEX'   // Group 1
-  | 'MEMX' | 'MIAX' | 'AMEX' | 'CHSX' | 'NSEX' | 'PHLX' // Group 2
-  | 'BATS' | 'BATY' | 'BOSX' | 'NYSE';           // Group 3
+export type ECN = string;
+
+export interface ECNGroupConfig {
+  id: string;          // e.g. 'group_a'
+  name: string;        // e.g. 'Group A'
+  buyKey: string;      // physical event.code e.g. 'KeyA'
+  sellKey: string;     // physical event.code e.g. 'KeyL'
+  ecns: ECN[];         // ordered array of ECN tickers e.g. ['NSDQ', 'ARCA', 'EDGX', 'EDGA']
+}
+
+export interface ECNRoutingConfig {
+  groups: ECNGroupConfig[];
+}
 
 export interface Prompt {
   action: ActionType;
@@ -72,11 +81,15 @@ export interface ECNWeightMap {
 }
 
 export interface KeyBindings {
-  buyGroup1: string;          // Default: 'KeyA'
-  buyGroup2: string;          // Default: 'KeyZ'
-  buyGroup3: string;          // Default: 'KeyQ'
+  buyGroupA: string;          // Default: 'KeyA'
+  buyGroupS: string;          // Default: 'KeyS'
+  buyGroupD: string;          // Default: 'KeyD'
+  buyGroupZ: string;          // Default: 'KeyZ'
+  buyGroupX: string;          // Default: 'KeyX'
 
-  sellGroup1: string;         // Default: 'KeyD'
-  sellGroup2: string;         // Default: 'KeyC'
-  sellGroup3: string;         // Default: 'KeyE'
+  sellGroupA: string;         // Default: 'KeyL'
+  sellGroupS: string;         // Default: 'Semicolon'
+  sellGroupD: string;         // Default: 'Quote'
+  sellGroupZ: string;         // Default: 'Comma'
+  sellGroupX: string;         // Default: 'Period'
 }

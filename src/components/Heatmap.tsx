@@ -1,12 +1,16 @@
 import React from 'react';
 import type { ECNMetrics } from '../core/analytics';
-import { ALL_ECNS } from '../core/learning';
+import { useTrainerStore } from '../store/trainerStore';
+import { getAllEcns } from '../core/learning';
 
 interface HeatmapProps {
   ecnMetrics: Record<string, ECNMetrics>;
 }
 
 export const Heatmap: React.FC<HeatmapProps> = ({ ecnMetrics }) => {
+  const routingConfig = useTrainerStore((state) => state.routingConfig);
+  const activeEcns = getAllEcns(routingConfig.groups);
+
   return (
     <div className="space-y-3 font-mono text-xs">
       <div className="flex justify-between items-center border-b border-terminal-border pb-2">
@@ -35,7 +39,7 @@ export const Heatmap: React.FC<HeatmapProps> = ({ ecnMetrics }) => {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
-        {ALL_ECNS.map((ecn) => {
+        {activeEcns.map((ecn) => {
           const metric = ecnMetrics[ecn];
           const hasData = metric && metric.attempts > 0;
           

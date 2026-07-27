@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { Prompt, ECN, ActionType, SessionEvent, Session, ECNWeightMap, KeyBindings } from '../types';
-import { processInput } from '../core/routing';
+import type { Prompt, ECN, ActionType, SessionEvent, Session, ECNWeightMap, KeyBindings, ECNGroupConfig, ECNRoutingConfig } from '../types';
+import { processInput, DEFAULT_GROUPS } from '../core/routing';
 import { adjustEcnWeight, initializeEcnWeights, selectNextEcn, computePerformanceWeights } from '../core/learning';
 import {
   loadSessionsFromStorage,
@@ -26,10 +26,13 @@ interface TrainerState {
   submissionMethod: 'Enter' | 'ShiftEnter';
   cancelMethod: 'Escape' | 'ShiftEscape';
   keyBindings: KeyBindings;
+  routingConfig: ECNRoutingConfig;
+  priceRangeMode: 'preset' | 'custom';
+  minPriceAdjustment: number;
+  maxPriceAdjustment: number;
   trackResets: boolean;
   trackOvershoots: boolean;
   trackRecoveries: boolean;
-  maxPriceAdjustment: 1 | 3 | 5 | 10;
   practiceModeType: 'stable' | 'time_limit';
   adaptivePacingEnabled: boolean;
   feedbackDelayMs: number;
@@ -84,11 +87,21 @@ interface TrainerState {
   lastKeyVal: string;
   lastShiftHeld: boolean;
 
-  // Navigation actions
+  // Navigation & Settings actions
   setView: (view: 'dashboard' | 'trainer' | 'analytics' | 'settings') => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   setTargetEcns: (ecns: ECN[]) => void;
   setDebugInfo: (code: string, key: string, shift: boolean) => void;
+
+  // ECN & Hotkey Group Management
+  updateRoutingConfig: (config: ECNRoutingConfig) => void;
+  addEcnGroup: (group: ECNGroupConfig) => void;
+  updateEcnGroup: (groupId: string, partial: Partial<ECNGroupConfig>) => void;
+  deleteEcnGroup: (groupId: string) => void;
+  addEcnToGroup: (groupId: string, ecn: ECN) => void;
+  removeEcnFromGroup: (groupId: string, ecn: ECN) => void;
+  reorderEcnsInGroup: (groupId: string, ecns: ECN[]) => void;
+  resetRoutingConfigToDefault: () => void;
 
   // Session controls
   startSession: () => void;
@@ -127,10 +140,13 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
   submissionMethod: savedSettings.submissionMethod,
   cancelMethod: savedSettings.cancelMethod,
   keyBindings: savedSettings.keyBindings,
+  routingConfig: savedSettings.routingConfig || { groups: DEFAULT_GROUPS },
+  priceRangeMode: savedSettings.priceRangeMode || 'preset',
+  minPriceAdjustment: savedSettings.minPriceAdjustment ?? 1,
+  maxPriceAdjustment: savedSettings.maxPriceAdjustment,
   trackResets: savedSettings.trackResets,
   trackOvershoots: savedSettings.trackOvershoots,
   trackRecoveries: savedSettings.trackRecoveries,
-  maxPriceAdjustment: savedSettings.maxPriceAdjustment,
   practiceModeType: savedSettings.practiceModeType,
   adaptivePacingEnabled: savedSettings.adaptivePacingEnabled,
   feedbackDelayMs: savedSettings.feedbackDelayMs,
@@ -169,7 +185,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
 
   // Persistent data cache
   sessions: loadSessionsFromStorage(),
-  ecnWeights: loadWeightsFromStorage(),
+  ecnWeights: loadWeightsFromStorage(savedSettings.routingConfig?.groups || DEFAULT_GROUPS),
 
   // Keyboard debug info
   lastPhysicalKey: '',
@@ -182,7 +198,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
   // Update Settings and sync to localStorage
   updateSettings: (newSettings) => {
     set((state) => {
-      const updated = {
+      const updated: AppSettings = {
         mode: newSettings.mode !== undefined ? newSettings.mode : state.mode,
         priceTrainingEnabled: newSettings.priceTrainingEnabled !== undefined ? newSettings.priceTrainingEnabled : state.priceTrainingEnabled,
         smartLearningEnabled: newSettings.smartLearningEnabled !== undefined ? newSettings.smartLearningEnabled : state.smartLearningEnabled,
@@ -192,10 +208,13 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
         submissionMethod: newSettings.submissionMethod !== undefined ? newSettings.submissionMethod : state.submissionMethod,
         cancelMethod: newSettings.cancelMethod !== undefined ? newSettings.cancelMethod : state.cancelMethod,
         keyBindings: newSettings.keyBindings !== undefined ? newSettings.keyBindings : state.keyBindings,
+        routingConfig: newSettings.routingConfig !== undefined ? newSettings.routingConfig : state.routingConfig,
+        priceRangeMode: newSettings.priceRangeMode !== undefined ? newSettings.priceRangeMode : state.priceRangeMode,
+        minPriceAdjustment: newSettings.minPriceAdjustment !== undefined ? newSettings.minPriceAdjustment : state.minPriceAdjustment,
+        maxPriceAdjustment: newSettings.maxPriceAdjustment !== undefined ? newSettings.maxPriceAdjustment : state.maxPriceAdjustment,
         trackResets: newSettings.trackResets !== undefined ? newSettings.trackResets : state.trackResets,
         trackOvershoots: newSettings.trackOvershoots !== undefined ? newSettings.trackOvershoots : state.trackOvershoots,
         trackRecoveries: newSettings.trackRecoveries !== undefined ? newSettings.trackRecoveries : state.trackRecoveries,
-        maxPriceAdjustment: newSettings.maxPriceAdjustment !== undefined ? newSettings.maxPriceAdjustment : state.maxPriceAdjustment,
         practiceModeType: newSettings.practiceModeType !== undefined ? newSettings.practiceModeType : state.practiceModeType,
         adaptivePacingEnabled: newSettings.adaptivePacingEnabled !== undefined ? newSettings.adaptivePacingEnabled : state.adaptivePacingEnabled,
         feedbackDelayMs: newSettings.feedbackDelayMs !== undefined ? newSettings.feedbackDelayMs : state.feedbackDelayMs,
@@ -205,29 +224,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
         targetStreakLength: newSettings.targetStreakLength !== undefined ? newSettings.targetStreakLength : state.targetStreakLength
       };
 
-      saveSettingsToStorage({
-        mode: updated.mode,
-        priceTrainingEnabled: updated.priceTrainingEnabled,
-        smartLearningEnabled: updated.smartLearningEnabled,
-        targetEcnModeEnabled: updated.targetEcnModeEnabled,
-        targetEcns: updated.targetEcns,
-        sessionLength: updated.sessionLength,
-        submissionMethod: updated.submissionMethod,
-        cancelMethod: updated.cancelMethod,
-        keyBindings: updated.keyBindings,
-        trackResets: updated.trackResets,
-        trackOvershoots: updated.trackOvershoots,
-        trackRecoveries: updated.trackRecoveries,
-        maxPriceAdjustment: updated.maxPriceAdjustment,
-        practiceModeType: updated.practiceModeType,
-        adaptivePacingEnabled: updated.adaptivePacingEnabled,
-        feedbackDelayMs: updated.feedbackDelayMs,
-        initialTimeLimitMs: updated.initialTimeLimitMs,
-        speedDecayMs: updated.speedDecayMs,
-        speedPenaltyMs: updated.speedPenaltyMs,
-        targetStreakLength: updated.targetStreakLength
-      });
-
+      saveSettingsToStorage(updated);
       return updated;
     });
   },
@@ -244,10 +241,69 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
     });
   },
 
+  // ECN Group Management Actions
+  updateRoutingConfig: (config) => {
+    get().updateSettings({ routingConfig: config });
+  },
+
+  addEcnGroup: (group) => {
+    const currentConfig = get().routingConfig;
+    const nextGroups = [...currentConfig.groups, group];
+    get().updateRoutingConfig({ groups: nextGroups });
+  },
+
+  updateEcnGroup: (groupId, partial) => {
+    const currentConfig = get().routingConfig;
+    const nextGroups = currentConfig.groups.map((g) => (g.id === groupId ? { ...g, ...partial } : g));
+    get().updateRoutingConfig({ groups: nextGroups });
+  },
+
+  deleteEcnGroup: (groupId) => {
+    const currentConfig = get().routingConfig;
+    const nextGroups = currentConfig.groups.filter((g) => g.id !== groupId);
+    get().updateRoutingConfig({ groups: nextGroups });
+  },
+
+  addEcnToGroup: (groupId, ecn) => {
+    const currentConfig = get().routingConfig;
+    const trimmed = ecn.trim().toUpperCase();
+    if (!trimmed) return;
+    const nextGroups = currentConfig.groups.map((g) => {
+      if (g.id === groupId) {
+        if (g.ecns.includes(trimmed)) return g;
+        return { ...g, ecns: [...g.ecns, trimmed] };
+      }
+      return g;
+    });
+    get().updateRoutingConfig({ groups: nextGroups });
+  },
+
+  removeEcnFromGroup: (groupId, ecn) => {
+    const currentConfig = get().routingConfig;
+    const nextGroups = currentConfig.groups.map((g) => {
+      if (g.id === groupId) {
+        return { ...g, ecns: g.ecns.filter((e) => e !== ecn) };
+      }
+      return g;
+    });
+    get().updateRoutingConfig({ groups: nextGroups });
+  },
+
+  reorderEcnsInGroup: (groupId, ecns) => {
+    const currentConfig = get().routingConfig;
+    const nextGroups = currentConfig.groups.map((g) => (g.id === groupId ? { ...g, ecns } : g));
+    get().updateRoutingConfig({ groups: nextGroups });
+  },
+
+  resetRoutingConfigToDefault: () => {
+    get().updateRoutingConfig({ groups: DEFAULT_GROUPS });
+  },
+
   // Session Control Actions
   startSession: () => {
     const sessions = loadSessionsFromStorage();
-    const ecnWeights = computePerformanceWeights(sessions);
+    const groups = get().routingConfig.groups;
+    const ecnWeights = computePerformanceWeights(sessions, groups);
     const initialTimeLimitMs = get().initialTimeLimitMs;
 
     set({
@@ -355,13 +411,11 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
     currentSessionEvents.forEach((e) => {
       if (!e.correct) {
         const actualVal = e.actualEcn || 'None';
-        if (e.expectedEcn !== actualVal) {
-          const key = `${e.expectedEcn} -> ${actualVal}`;
-          if (!mistakeCounts[key]) {
-            mistakeCounts[key] = { expected: e.expectedEcn, actual: actualVal, count: 0 };
-          }
-          mistakeCounts[key].count += 1;
+        const key = `${e.expectedEcn} -> ${actualVal}`;
+        if (!mistakeCounts[key]) {
+          mistakeCounts[key] = { expected: e.expectedEcn, actual: actualVal, count: 0 };
         }
+        mistakeCounts[key].count += 1;
       }
     });
     const mistakeMatrix = Object.values(mistakeCounts).sort((a, b) => b.count - a.count);
@@ -457,7 +511,8 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
   },
 
   nextPrompt: () => {
-    const { sessionLength, currentSessionEvents, ecnWeights, targetEcnModeEnabled, targetEcns, mode, priceTrainingEnabled } = get();
+    const { sessionLength, currentSessionEvents, ecnWeights, targetEcnModeEnabled, targetEcns, mode, priceTrainingEnabled, routingConfig, priceRangeMode, minPriceAdjustment, maxPriceAdjustment } = get();
+    const groups = routingConfig.groups;
 
     // End session automatically if prompt limit is reached
     if (sessionLength > 0 && currentSessionEvents.length >= sessionLength) {
@@ -471,7 +526,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
       ecnFilter = (ecn) => targetEcns.includes(ecn);
     }
 
-    const nextEcn = selectNextEcn(ecnWeights, currentSessionEvents, 3, ecnFilter);
+    const nextEcn = selectNextEcn(ecnWeights, currentSessionEvents, 3, ecnFilter, groups);
 
     // Determine Buy/Sell side action
     let nextAction: ActionType;
@@ -488,13 +543,20 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
     let priceAdjustment: number | undefined;
     if (priceTrainingEnabled) {
       basePrice = parseFloat((Math.random() * 89 + 10).toFixed(2));
-      const max = get().maxPriceAdjustment || 5;
-      const adjustments: number[] = [];
-      for (let i = 1; i <= max; i++) {
-        adjustments.push(i);
-        adjustments.push(-i);
+      if (priceRangeMode === 'custom') {
+        const minVal = Math.max(1, Math.min(minPriceAdjustment || 1, maxPriceAdjustment || 5));
+        const maxVal = Math.max(minVal, maxPriceAdjustment || 5);
+        const rangeVal = Math.floor(Math.random() * (maxVal - minVal + 1)) + minVal;
+        priceAdjustment = Math.random() < 0.5 ? rangeVal : -rangeVal;
+      } else {
+        const max = maxPriceAdjustment || 5;
+        const adjustments: number[] = [];
+        for (let i = 1; i <= max; i++) {
+          adjustments.push(i);
+          adjustments.push(-i);
+        }
+        priceAdjustment = adjustments[Math.floor(Math.random() * adjustments.length)];
       }
-      priceAdjustment = adjustments[Math.floor(Math.random() * adjustments.length)];
     }
 
     set({
@@ -521,7 +583,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
 
   // Input processing
   pressRouteKey: (code) => {
-    const { sessionState, feedback, currentPrompt, activeRouteKey, inputSequence, pressCount, spaceResetsInCurrentPrompt, keyBindings } = get();
+    const { sessionState, feedback, currentPrompt, activeRouteKey, inputSequence, pressCount, spaceResetsInCurrentPrompt, keyBindings, routingConfig } = get();
     if (sessionState !== 'RUNNING' || feedback || !currentPrompt) return;
 
     const isSameKey = activeRouteKey === code;
@@ -535,6 +597,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
       nextActiveKey,
       nextPressCount,
       spaceResetsInCurrentPrompt,
+      routingConfig.groups,
       keyBindings
     );
 
@@ -566,6 +629,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
       pressCount,
       spaceResetsInCurrentPrompt,
       keyBindings,
+      routingConfig,
       accumulatedElapsedMs,
       startTime,
       priceTrainingEnabled,
@@ -575,7 +639,6 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
       currentSessionEvents,
       sessionLength,
       overshootsInCurrentPrompt,
-      wrapsInCurrentPrompt,
       recoveriesInCurrentPrompt,
       inputSequence,
       adaptivePacingEnabled,
@@ -600,6 +663,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
         activeRouteKey,
         pressCount,
         spaceResetsInCurrentPrompt,
+        routingConfig.groups,
         keyBindings
       );
       resolvedEcn = currentEcn;
@@ -607,9 +671,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
 
     const ecnCorrect = (() => {
       if (!activeRouteKey || !resolvedEcn) return false;
-      const validCodesForAction = currentPrompt.action === 'BUY'
-        ? [keyBindings.buyGroup1, keyBindings.buyGroup2, keyBindings.buyGroup3]
-        : [keyBindings.sellGroup1, keyBindings.sellGroup2, keyBindings.sellGroup3];
+      const validCodesForAction = routingConfig.groups.map((g) => (currentPrompt.action === 'BUY' ? g.buyKey : g.sellKey));
       return validCodesForAction.includes(activeRouteKey) && resolvedEcn === currentPrompt.ecn;
     })();
     const priceCorrect = priceTrainingEnabled ? (userPriceAdjustment === currentPrompt.priceAdjustment) : true;
@@ -658,7 +720,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
       actualPriceAdjustment: priceTrainingEnabled ? userPriceAdjustment : undefined,
       metrics: {
         overshoots: overshootsInCurrentPrompt,
-        wraps: wrapsInCurrentPrompt,
+        wraps: overshootsInCurrentPrompt > 0 ? 1 : 0, // approximation fallback
         recoveries: recoveriesInCurrentPrompt,
         spaceResets: spaceResetsInCurrentPrompt
       }
@@ -806,7 +868,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
 
     set({
       sessions: [],
-      ecnWeights: initializeEcnWeights(),
+      ecnWeights: initializeEcnWeights(get().routingConfig.groups),
       sessionState: 'IDLE',
       isSessionActive: false,
       currentPrompt: null,

@@ -1,10 +1,10 @@
-import type { Session, ECNWeightMap, KeyBindings, ECN } from '../types';
+import type { Session, ECNWeightMap, KeyBindings, ECN, ECNRoutingConfig } from '../types';
 import { initializeEcnWeights } from './learning';
+import { DEFAULT_GROUPS } from './routing';
 
 const SESSIONS_KEY = 'ecn_trainer_sessions';
 const WEIGHTS_KEY = 'ecn_trainer_weights';
 const SETTINGS_KEY = 'ecn_trainer_settings';
-const SETTINGS_VERSION = 2; // Bumped when keybinding schema changes
 
 export interface AppSettings {
   mode: 'buy_only' | 'sell_only' | 'mixed';
@@ -16,10 +16,13 @@ export interface AppSettings {
   submissionMethod: 'Enter' | 'ShiftEnter';
   cancelMethod: 'Escape' | 'ShiftEscape';
   keyBindings: KeyBindings;
+  routingConfig: ECNRoutingConfig;
+  priceRangeMode: 'preset' | 'custom';
+  minPriceAdjustment: number;
+  maxPriceAdjustment: number;
   trackResets: boolean;
   trackOvershoots: boolean;
   trackRecoveries: boolean;
-  maxPriceAdjustment: 1 | 3 | 5 | 10;
   practiceModeType: 'stable' | 'time_limit';
   adaptivePacingEnabled: boolean;
   feedbackDelayMs: number;
@@ -30,13 +33,17 @@ export interface AppSettings {
 }
 
 const DEFAULT_BINDINGS: KeyBindings = {
-  buyGroup1: 'KeyA',
-  buyGroup2: 'KeyZ',
-  buyGroup3: 'KeyQ',
+  buyGroupA: 'KeyA',
+  buyGroupS: 'KeyS',
+  buyGroupD: 'KeyD',
+  buyGroupZ: 'KeyZ',
+  buyGroupX: 'KeyX',
 
-  sellGroup1: 'KeyD',
-  sellGroup2: 'KeyC',
-  sellGroup3: 'KeyE'
+  sellGroupA: 'KeyL',
+  sellGroupS: 'Semicolon',
+  sellGroupD: 'Quote',
+  sellGroupZ: 'Comma',
+  sellGroupX: 'Period'
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -49,10 +56,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   submissionMethod: 'Enter',
   cancelMethod: 'Escape',
   keyBindings: DEFAULT_BINDINGS,
+  routingConfig: { groups: DEFAULT_GROUPS },
+  priceRangeMode: 'preset',
+  minPriceAdjustment: 1,
+  maxPriceAdjustment: 5,
   trackResets: true,
   trackOvershoots: true,
   trackRecoveries: true,
-  maxPriceAdjustment: 5,
   practiceModeType: 'stable',
   adaptivePacingEnabled: true,
   feedbackDelayMs: 500,
@@ -89,20 +99,23 @@ export function saveWeightsToStorage(weights: ECNWeightMap): void {
   }
 }
 
-export function loadWeightsFromStorage(): ECNWeightMap {
+export function loadWeightsFromStorage(groups = DEFAULT_GROUPS): ECNWeightMap {
   try {
     const raw = localStorage.getItem(WEIGHTS_KEY);
-    if (!raw) return initializeEcnWeights();
-    return JSON.parse(raw) as ECNWeightMap;
+    if (!raw) return initializeEcnWeights(groups);
+    const parsed = JSON.parse(raw) as ECNWeightMap;
+    // ensure new ECNs get default weights if missing
+    const defaultWeights = initializeEcnWeights(groups);
+    return { ...defaultWeights, ...parsed };
   } catch (error) {
     console.error('Failed to parse weights from localStorage:', error);
-    return initializeEcnWeights();
+    return initializeEcnWeights(groups);
   }
 }
 
 export function saveSettingsToStorage(settings: AppSettings): void {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings, _version: SETTINGS_VERSION }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch (error) {
     console.error('Failed to save settings to localStorage:', error);
   }
@@ -113,30 +126,12 @@ export function loadSettingsFromStorage(): AppSettings {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw);
-
-    // Version check: if stored version doesn't match, wipe keybindings
-    if (parsed._version !== SETTINGS_VERSION) {
-      console.info('[ECN Trainer] Settings schema version mismatch — resetting keybindings to defaults.');
-      const migrated = { ...DEFAULT_SETTINGS, ...parsed, keyBindings: DEFAULT_BINDINGS, _version: SETTINGS_VERSION };
-      saveSettingsToStorage(migrated);
-      return migrated;
-    }
-
-    // Safely merge keyBindings to prevent old/missing keys from causing issues
-    const parsedBindings = parsed.keyBindings || {};
-    const keyBindings: KeyBindings = {
-      buyGroup1: parsedBindings.buyGroup1 || DEFAULT_SETTINGS.keyBindings.buyGroup1,
-      buyGroup2: parsedBindings.buyGroup2 || DEFAULT_SETTINGS.keyBindings.buyGroup2,
-      buyGroup3: parsedBindings.buyGroup3 || DEFAULT_SETTINGS.keyBindings.buyGroup3,
-      sellGroup1: parsedBindings.sellGroup1 || DEFAULT_SETTINGS.keyBindings.sellGroup1,
-      sellGroup2: parsedBindings.sellGroup2 || DEFAULT_SETTINGS.keyBindings.sellGroup2,
-      sellGroup3: parsedBindings.sellGroup3 || DEFAULT_SETTINGS.keyBindings.sellGroup3,
-    };
-
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
-      keyBindings
+      routingConfig: parsed.routingConfig || { groups: DEFAULT_GROUPS },
+      priceRangeMode: parsed.priceRangeMode || 'preset',
+      minPriceAdjustment: parsed.minPriceAdjustment ?? 1
     };
   } catch (error) {
     console.error('Failed to parse settings from localStorage:', error);

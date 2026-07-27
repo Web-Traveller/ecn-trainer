@@ -1,29 +1,40 @@
-import type { ECN, ActionType, InputMetrics, KeyBindings } from '../types';
+import type { ECN, ActionType, InputMetrics, KeyBindings, ECNGroupConfig } from '../types';
 
 export const DEFAULT_BINDINGS: KeyBindings = {
-  buyGroup1: 'KeyA',
-  buyGroup2: 'KeyZ',
-  buyGroup3: 'KeyQ',
+  buyGroupA: 'KeyA',
+  buyGroupS: 'KeyS',
+  buyGroupD: 'KeyD',
+  buyGroupZ: 'KeyZ',
+  buyGroupX: 'KeyX',
 
-  sellGroup1: 'KeyD',
-  sellGroup2: 'KeyC',
-  sellGroup3: 'KeyE'
+  sellGroupA: 'KeyL',
+  sellGroupS: 'Semicolon',
+  sellGroupD: 'Quote',
+  sellGroupZ: 'Comma',
+  sellGroupX: 'Period'
 };
 
+export const DEFAULT_GROUPS: ECNGroupConfig[] = [
+  { id: 'group_a', name: 'Group A', buyKey: 'KeyA', sellKey: 'KeyL', ecns: ['NSDQ', 'ARCA', 'EDGX', 'EDGA'] },
+  { id: 'group_s', name: 'Group S', buyKey: 'KeyS', sellKey: 'Semicolon', ecns: ['NYSE', 'NSEX', 'IEX'] },
+  { id: 'group_d', name: 'Group D', buyKey: 'KeyD', sellKey: 'Quote', ecns: ['CHX', 'PHLX'] },
+  { id: 'group_z', name: 'Group Z', buyKey: 'KeyZ', sellKey: 'Comma', ecns: ['MEMX', 'MIAX', 'AMEX'] },
+  { id: 'group_x', name: 'Group X', buyKey: 'KeyX', sellKey: 'Period', ecns: ['BATS', 'BATY', 'BOSX'] }
+];
+
 export const ECN_GROUP_LISTS = {
-  Group1: ['NSDQ', 'ARCA', 'EDGX', 'EDGA', 'IEX'] as ECN[],
-  Group2: ['MEMX', 'MIAX', 'AMEX', 'CHSX', 'NSEX', 'PHLX'] as ECN[],
-  Group3: ['BATS', 'BATY', 'BOSX', 'NYSE'] as ECN[]
+  GroupA: ['NSDQ', 'ARCA', 'EDGX', 'EDGA'] as ECN[],
+  GroupS: ['NYSE', 'NSEX', 'IEX'] as ECN[],
+  GroupD: ['CHX', 'PHLX'] as ECN[],
+  GroupZ: ['MEMX', 'MIAX', 'AMEX'] as ECN[],
+  GroupX: ['BATS', 'BATY', 'BOSX'] as ECN[]
 };
 
 /**
- * Identifies which of the 3 group indices an ECN belongs to.
+ * Identifies which ECN group an ECN belongs to from dynamic configuration.
  */
-export function getGroupForEcn(ecn: ECN): 'Group1' | 'Group2' | 'Group3' | null {
-  if (ECN_GROUP_LISTS.Group1.includes(ecn)) return 'Group1';
-  if (ECN_GROUP_LISTS.Group2.includes(ecn)) return 'Group2';
-  if (ECN_GROUP_LISTS.Group3.includes(ecn)) return 'Group3';
-  return null;
+export function getGroupForEcn(ecn: ECN, groups: ECNGroupConfig[] = DEFAULT_GROUPS): ECNGroupConfig | null {
+  return groups.find((g) => g.ecns.includes(ecn)) || null;
 }
 
 /**
@@ -32,24 +43,26 @@ export function getGroupForEcn(ecn: ECN): 'Group1' | 'Group2' | 'Group3' | null 
 export function getTargetKeyAndPresses(
   action: ActionType,
   targetEcn: ECN,
-  bindings: KeyBindings
+  groups: ECNGroupConfig[] = DEFAULT_GROUPS,
+  bindings?: KeyBindings
 ): { key: string; expectedPresses: number } | null {
-  const group = getGroupForEcn(targetEcn);
+  const group = getGroupForEcn(targetEcn, groups);
   if (!group) return null;
 
-  let boundKey = '';
-  if (action === 'BUY') {
-    if (group === 'Group1') boundKey = bindings.buyGroup1;
-    else if (group === 'Group2') boundKey = bindings.buyGroup2;
-    else if (group === 'Group3') boundKey = bindings.buyGroup3;
-  } else {
-    if (group === 'Group1') boundKey = bindings.sellGroup1;
-    else if (group === 'Group2') boundKey = bindings.sellGroup2;
-    else if (group === 'Group3') boundKey = bindings.sellGroup3;
+  let boundKey = action === 'BUY' ? group.buyKey : group.sellKey;
+
+  // Fallback override if legacy bindings provided and matching default groups
+  if (bindings) {
+    if (group.id === 'group_a') boundKey = action === 'BUY' ? bindings.buyGroupA : bindings.sellGroupA;
+    else if (group.id === 'group_s') boundKey = action === 'BUY' ? bindings.buyGroupS : bindings.sellGroupS;
+    else if (group.id === 'group_d') boundKey = action === 'BUY' ? bindings.buyGroupD : bindings.sellGroupD;
+    else if (group.id === 'group_z') boundKey = action === 'BUY' ? bindings.buyGroupZ : bindings.sellGroupZ;
+    else if (group.id === 'group_x') boundKey = action === 'BUY' ? bindings.buyGroupX : bindings.sellGroupX;
   }
 
-  const ecns = ECN_GROUP_LISTS[group];
-  const index = ecns.indexOf(targetEcn);
+  const index = group.ecns.indexOf(targetEcn);
+  if (index === -1) return null;
+
   return { key: boundKey, expectedPresses: index + 1 };
 }
 
@@ -62,36 +75,26 @@ export function processInput(
   activeKeyCode: string, // physical event.code
   pressCount: number,
   spaceResets: number,
-  bindings: KeyBindings
+  groups: ECNGroupConfig[] = DEFAULT_GROUPS,
+  bindings?: KeyBindings
 ): { currentEcn: ECN | null; metrics: InputMetrics } {
-  const targetInfo = getTargetKeyAndPresses(action, targetEcn, bindings);
+  const targetInfo = getTargetKeyAndPresses(action, targetEcn, groups, bindings);
 
-  let activeGroup: 'Group1' | 'Group2' | 'Group3' | null = null;
-  if (action === 'BUY') {
-    if (activeKeyCode === bindings.buyGroup1) activeGroup = 'Group1';
-    else if (activeKeyCode === bindings.buyGroup2) activeGroup = 'Group2';
-    else if (activeKeyCode === bindings.buyGroup3) activeGroup = 'Group3';
-  } else {
-    if (activeKeyCode === bindings.sellGroup1) activeGroup = 'Group1';
-    else if (activeKeyCode === bindings.sellGroup2) activeGroup = 'Group2';
-    else if (activeKeyCode === bindings.sellGroup3) activeGroup = 'Group3';
-  }
+  let activeGroup = groups.find((g) => (action === 'BUY' ? g.buyKey === activeKeyCode : g.sellKey === activeKeyCode));
 
-  // Fallback to check the opposite action's bindings if not found
+  // Fallback check opposite action or bindings
   if (!activeGroup) {
-    if (activeKeyCode === bindings.buyGroup1 || activeKeyCode === bindings.sellGroup1) activeGroup = 'Group1';
-    else if (activeKeyCode === bindings.buyGroup2 || activeKeyCode === bindings.sellGroup2) activeGroup = 'Group2';
-    else if (activeKeyCode === bindings.buyGroup3 || activeKeyCode === bindings.sellGroup3) activeGroup = 'Group3';
+    activeGroup = groups.find((g) => g.buyKey === activeKeyCode || g.sellKey === activeKeyCode);
   }
 
-  if (!activeGroup || pressCount <= 0) {
+  if (!activeGroup || activeGroup.ecns.length === 0 || pressCount <= 0) {
     return {
       currentEcn: null,
       metrics: { overshoots: 0, wraps: 0, recoveries: 0, spaceResets }
     };
   }
 
-  const groupEcns = ECN_GROUP_LISTS[activeGroup];
+  const groupEcns = activeGroup.ecns;
   const currentIndex = (pressCount - 1) % groupEcns.length;
   const currentEcn = groupEcns[currentIndex];
 

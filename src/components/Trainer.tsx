@@ -3,7 +3,7 @@ import { useTrainerStore } from '../store/trainerStore';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useLiveTimer } from '../hooks/useLiveTimer';
 import { processInput } from '../core/routing';
-import { ALL_ECNS } from '../core/learning';
+import { getAllEcns } from '../core/learning';
 import type { ECN } from '../types';
 
 export const Trainer: React.FC = () => {
@@ -24,10 +24,13 @@ export const Trainer: React.FC = () => {
     sessionLength,
     spaceResetsInCurrentPrompt,
     keyBindings,
+    routingConfig,
     
     // Config states
     mode,
     priceTrainingEnabled,
+    priceRangeMode,
+    minPriceAdjustment,
     smartLearningEnabled,
     targetEcnModeEnabled,
     targetEcns,
@@ -137,7 +140,7 @@ export const Trainer: React.FC = () => {
   // Most common mistakes
   const mistakeCounts: { [key: string]: { expected: string; actual: string; count: number } } = {};
   currentSessionEvents.forEach((e) => {
-    if (!e.correct && e.expectedEcn !== e.actualEcn) {
+    if (!e.correct) {
       const key = `${e.expectedEcn}->${e.actualEcn}`;
       if (!mistakeCounts[key]) {
         mistakeCounts[key] = { expected: e.expectedEcn, actual: e.actualEcn, count: 0 };
@@ -300,25 +303,91 @@ export const Trainer: React.FC = () => {
 
 
 
-            {/* Max Price Adjustment selector */}
+            {/* Price Training Range Selection */}
             {priceTrainingEnabled && (
-              <div className="space-y-1.5 border-t border-terminal-border/40 pt-2.5">
-                <label className="text-[10px] font-mono text-terminal-muted uppercase block">Max Price Adjustment</label>
-                <div className="flex gap-2">
-                  {[1, 3, 5, 10].map((val) => (
+              <div className="space-y-2 border-t border-terminal-border/40 pt-2.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-mono text-terminal-muted uppercase block font-bold">
+                    Price Movement Range
+                  </label>
+                  <div className="flex gap-1 text-[10px]">
                     <button
-                      key={val}
-                      onClick={() => updateSettings({ maxPriceAdjustment: val as 1 | 3 | 5 | 10 })}
-                      className={`px-2.5 py-1 font-mono text-xs border cursor-pointer ${
-                        maxPriceAdjustment === val 
-                          ? 'bg-info-blue border-info-blue text-terminal-bg font-black' 
-                          : 'border-terminal-border text-terminal-muted hover:border-terminal-muted'
+                      type="button"
+                      onClick={() => updateSettings({ priceRangeMode: 'preset' })}
+                      className={`px-2 py-0.5 border font-mono ${
+                        priceRangeMode === 'preset'
+                          ? 'bg-info-blue/20 border-info-blue text-info-blue font-bold'
+                          : 'bg-terminal-bg border-terminal-border text-terminal-muted hover:border-terminal-border'
                       }`}
                     >
-                      {val}¢
+                      Preset
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({ priceRangeMode: 'custom' })}
+                      className={`px-2 py-0.5 border font-mono ${
+                        priceRangeMode === 'custom'
+                          ? 'bg-info-blue/20 border-info-blue text-info-blue font-bold'
+                          : 'bg-terminal-bg border-terminal-border text-terminal-muted hover:border-terminal-border'
+                      }`}
+                    >
+                      Custom Min/Max
+                    </button>
+                  </div>
                 </div>
+
+                {priceRangeMode === 'custom' ? (
+                  <div className="grid grid-cols-2 gap-2 bg-terminal-bg p-2 border border-terminal-border">
+                    <div>
+                      <span className="text-[9px] font-mono text-terminal-muted uppercase block mb-1">Min Delta (¢)</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={maxPriceAdjustment || 100}
+                        value={minPriceAdjustment}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val > 0) {
+                            updateSettings({ minPriceAdjustment: val });
+                          }
+                        }}
+                        className="w-full bg-terminal-panel border border-terminal-border text-xs py-1 px-2 text-terminal-text font-mono text-center focus:outline-none focus:border-info-blue"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono text-terminal-muted uppercase block mb-1">Max Delta (¢)</span>
+                      <input
+                        type="number"
+                        min={minPriceAdjustment || 1}
+                        max={500}
+                        value={maxPriceAdjustment}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= (minPriceAdjustment || 1)) {
+                            updateSettings({ maxPriceAdjustment: val });
+                          }
+                        }}
+                        className="w-full bg-terminal-panel border border-terminal-border text-xs py-1 px-2 text-terminal-text font-mono text-center focus:outline-none focus:border-info-blue"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 pt-1">
+                    {[1, 3, 5, 10].map((val) => (
+                      <button
+                        key={val}
+                        onClick={() => updateSettings({ maxPriceAdjustment: val as 1 | 3 | 5 | 10 })}
+                        className={`flex-1 py-1 font-mono text-xs border cursor-pointer ${
+                          maxPriceAdjustment === val 
+                            ? 'bg-info-blue border-info-blue text-terminal-bg font-black' 
+                            : 'border-terminal-border text-terminal-muted hover:border-terminal-muted'
+                        }`}
+                      >
+                        {val}¢
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -493,7 +562,7 @@ export const Trainer: React.FC = () => {
             </p>
 
             <div className="grid grid-cols-3 gap-2 pt-1">
-              {ALL_ECNS.map((ecn) => {
+              {getAllEcns(routingConfig.groups).map((ecn) => {
                 const isSelected = targetEcns.includes(ecn);
                 return (
                   <button
@@ -679,6 +748,7 @@ export const Trainer: React.FC = () => {
       activeRouteKey,
       pressCount,
       spaceResetsInCurrentPrompt,
+      routingConfig.groups,
       keyBindings
     );
     resolvedEcn = currentEcn;

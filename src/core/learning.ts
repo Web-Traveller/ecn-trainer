@@ -1,17 +1,37 @@
-import type { ECN, ECNWeightMap, Session, SessionEvent } from '../types';
+import type { ECN, ECNWeightMap, Session, SessionEvent, ECNGroupConfig } from '../types';
+import { DEFAULT_GROUPS } from './routing';
 
 export const ALL_ECNS: ECN[] = [
-  'NSDQ', 'ARCA', 'EDGX', 'EDGA', 'IEX',
-  'MEMX', 'MIAX', 'AMEX', 'CHSX', 'NSEX', 'PHLX',
-  'BATS', 'BATY', 'BOSX', 'NYSE'
+  'NSDQ', 'ARCA', 'EDGX', 'EDGA',
+  'NYSE', 'NSEX', 'IEX',
+  'CHX', 'PHLX',
+  'MEMX', 'MIAX', 'AMEX',
+  'BATS', 'BATY', 'BOSX'
 ];
+
+/**
+ * Returns all active ECN tickers from group configurations
+ */
+export function getAllEcns(groups: ECNGroupConfig[] = DEFAULT_GROUPS): ECN[] {
+  if (!groups || groups.length === 0) return ALL_ECNS;
+  const list: ECN[] = [];
+  groups.forEach((g) => {
+    g.ecns.forEach((ecn) => {
+      if (!list.includes(ecn)) {
+        list.push(ecn);
+      }
+    });
+  });
+  return list.length > 0 ? list : ALL_ECNS;
+}
 
 /**
  * Initializes a weight map where every ECN starts with weight 1.0
  */
-export function initializeEcnWeights(): ECNWeightMap {
+export function initializeEcnWeights(groups: ECNGroupConfig[] = DEFAULT_GROUPS): ECNWeightMap {
   const weights: ECNWeightMap = {};
-  ALL_ECNS.forEach((ecn) => {
+  const activeEcns = getAllEcns(groups);
+  activeEcns.forEach((ecn) => {
     weights[ecn] = 1.0;
   });
   return weights;
@@ -40,9 +60,10 @@ export function adjustEcnWeight(currentWeights: ECNWeightMap, ecn: ECN, correct:
  * Low accuracy yields a higher weight (up to 2.5x).
  * Slower ECNs yield a latency boost.
  */
-export function computePerformanceWeights(sessions: Session[]): ECNWeightMap {
+export function computePerformanceWeights(sessions: Session[], groups: ECNGroupConfig[] = DEFAULT_GROUPS): ECNWeightMap {
   const weights: ECNWeightMap = {};
-  ALL_ECNS.forEach((ecn) => {
+  const activeEcns = getAllEcns(groups);
+  activeEcns.forEach((ecn) => {
     weights[ecn] = 1.0;
   });
 
@@ -52,7 +73,7 @@ export function computePerformanceWeights(sessions: Session[]): ECNWeightMap {
 
   // Gather stats per ECN
   const statsMap = new Map<ECN, { correct: number; total: number; totalLatency: number }>();
-  ALL_ECNS.forEach((ecn) => {
+  activeEcns.forEach((ecn) => {
     statsMap.set(ecn, { correct: 0, total: 0, totalLatency: 0 });
   });
 
@@ -76,9 +97,9 @@ export function computePerformanceWeights(sessions: Session[]): ECNWeightMap {
   let ecnsWithLatencyCount = 0;
   const ecnAverages = new Map<ECN, { accuracy: number; avgLatency: number }>();
 
-  ALL_ECNS.forEach((ecn) => {
-    const stats = statsMap.get(ecn)!;
-    if (stats.total > 0) {
+  activeEcns.forEach((ecn) => {
+    const stats = statsMap.get(ecn);
+    if (stats && stats.total > 0) {
       const accuracy = stats.correct / stats.total;
       const avgLatency = stats.correct > 0 ? stats.totalLatency / stats.correct : 0;
       ecnAverages.set(ecn, { accuracy, avgLatency });
@@ -94,11 +115,11 @@ export function computePerformanceWeights(sessions: Session[]): ECNWeightMap {
   const overallAvgLatency = ecnsWithLatencyCount > 0 ? totalLatencyOfAllEcns / ecnsWithLatencyCount : 0;
 
   // Set final weights
-  ALL_ECNS.forEach((ecn) => {
+  activeEcns.forEach((ecn) => {
     const avg = ecnAverages.get(ecn)!;
     const stats = statsMap.get(ecn)!;
 
-    if (stats.total === 0) {
+    if (!stats || stats.total === 0) {
       weights[ecn] = 1.0;
       return;
     }
@@ -123,16 +144,18 @@ export function selectNextEcn(
   weights: ECNWeightMap,
   currentSessionEvents: SessionEvent[],
   repetitionThreshold: number,
-  filter?: (ecn: ECN) => boolean
+  filter?: (ecn: ECN) => boolean,
+  groups: ECNGroupConfig[] = DEFAULT_GROUPS
 ): ECN {
-  let eligibleEcns = filter ? ALL_ECNS.filter(filter) : ALL_ECNS;
+  const activeEcns = getAllEcns(groups);
+  let eligibleEcns = filter ? activeEcns.filter(filter) : activeEcns;
   if (eligibleEcns.length === 0) {
-    eligibleEcns = ALL_ECNS;
+    eligibleEcns = activeEcns;
   }
 
   // Count occurrences in current session
   const occurrences = {} as Record<ECN, number>;
-  ALL_ECNS.forEach((ecn) => {
+  activeEcns.forEach((ecn) => {
     occurrences[ecn] = 0;
   });
   currentSessionEvents.forEach((event) => {
@@ -199,4 +222,3 @@ export function selectNextEcn(
 
   return candidates[candidates.length - 1];
 }
-
