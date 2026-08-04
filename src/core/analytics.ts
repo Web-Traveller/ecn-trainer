@@ -515,3 +515,186 @@ export function calculateGlobalStats(sessions: Session[]): GlobalStats {
     bestTargetEcnModeAccuracy
   };
 }
+
+export interface DailyPracticeSummary {
+  dateStr: string; // YYYY-MM-DD
+  minutes: number;
+  sessionCount: number;
+  promptCount: number;
+  correctCount: number;
+  totalTimeMs: number;
+  accuracy: number;        // overall accuracy for that day (0-100)
+  avgSpeedSeconds: number; // average speed for that day (seconds)
+}
+
+export interface PracticeHabitStats {
+  currentStreak: number;
+  longestStreak: number;
+  totalActiveDays: number;
+  weeklyConsistencyPercent: number; // % of days active in current week (last 7 days)
+  dailyMap: Record<string, DailyPracticeSummary>; // key is YYYY-MM-DD
+  heatmapData: { dateStr: string; count: number; minutes: number; prompts: number }[]; // for the calendar heatmap (last 365 days)
+  last14DaysData: { dateStr: string; label: string; minutes: number }[]; // for the 14-day bar chart
+}
+
+const getLocalDateString = (dateObj: Date): string => {
+  const yyyy = dateObj.getFullYear();
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+export function calculatePracticeHabitStats(sessions: Session[]): PracticeHabitStats {
+  const dailyMap: Record<string, DailyPracticeSummary> = {};
+
+  // 1. Group by local date string
+  sessions.forEach((s) => {
+    const d = new Date(s.date);
+    const dateStr = getLocalDateString(d);
+    
+    // Duration in minutes
+    const durationMs = s.sessionDurationMs || (s.averageTime * s.events.length) || 0;
+    const durationMin = durationMs / (1000 * 60);
+    const promptCount = s.events.length;
+    const correctCount = s.events.filter(e => e.correct).length;
+    const totalTimeMs = s.events.reduce((sum, e) => sum + e.reactionTimeMs, 0);
+
+    if (!dailyMap[dateStr]) {
+      dailyMap[dateStr] = {
+        dateStr,
+        minutes: 0,
+        sessionCount: 0,
+        promptCount: 0,
+        correctCount: 0,
+        totalTimeMs: 0,
+        accuracy: 0,
+        avgSpeedSeconds: 0
+      };
+    }
+    dailyMap[dateStr].minutes += durationMin;
+    dailyMap[dateStr].sessionCount += 1;
+    dailyMap[dateStr].promptCount += promptCount;
+    dailyMap[dateStr].correctCount += correctCount;
+    dailyMap[dateStr].totalTimeMs += totalTimeMs;
+  });
+
+  // Calculate averages for dailyMap
+  Object.keys(dailyMap).forEach((dateStr) => {
+    const day = dailyMap[dateStr];
+    if (day.promptCount > 0) {
+      day.accuracy = (day.correctCount / day.promptCount) * 100;
+      day.avgSpeedSeconds = (day.totalTimeMs / day.promptCount) / 1000;
+    }
+  });
+
+  // 2. Streaks calculation
+  const activeDates = Object.keys(dailyMap).sort();
+  let longestStreak = 0;
+  let currentStreak = 0;
+
+  if (activeDates.length > 0) {
+    // Helper to add/subtract days
+    const addDays = (dateStr: string, days: number): string => {
+      const d = new Date(dateStr + 'T00:00:00'); // append time to parse local date
+      d.setDate(d.getDate() + days);
+      return getLocalDateString(d);
+    };
+
+    // Calculate longest streak
+    let tempStreak = 1;
+    longestStreak = 1;
+    for (let i = 1; i < activeDates.length; i++) {
+      const prevDate = activeDates[i - 1];
+      const currDate = activeDates[i];
+      const expectedNext = addDays(prevDate, 1);
+      if (currDate === expectedNext) {
+        tempStreak += 1;
+      } else if (currDate !== prevDate) {
+        tempStreak = 1;
+      }
+      if (tempStreak > longestStreak) {
+        longestStreak = tempStreak;
+      }
+    }
+
+    // Calculate current streak
+    const todayStr = getLocalDateString(new Date());
+    const yesterdayStr = addDays(todayStr, -1);
+
+    let checkDateStr = '';
+    if (dailyMap[todayStr]) {
+      checkDateStr = todayStr;
+    } else if (dailyMap[yesterdayStr]) {
+      checkDateStr = yesterdayStr;
+    }
+
+    if (checkDateStr) {
+      currentStreak = 0;
+      let curr = checkDateStr;
+      while (dailyMap[curr]) {
+        currentStreak += 1;
+        curr = addDays(curr, -1);
+      }
+    }
+  }
+
+  // 3. Weekly consistency (active days in last 7 days including today)
+  let activeInLast7 = 0;
+  const today = new Date();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const dStr = getLocalDateString(d);
+    if (dailyMap[dStr]) {
+      activeInLast7 += 1;
+    }
+  }
+  const weeklyConsistencyPercent = (activeInLast7 / 7) * 100;
+
+  // 4. Last 14 days chart data
+  const last14DaysData: { dateStr: string; label: string; minutes: number }[] = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const dStr = getLocalDateString(d);
+    const label = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
+    last14DaysData.push({
+      dateStr: dStr,
+      label,
+      minutes: dailyMap[dStr]?.minutes || 0
+    });
+  }
+
+  // 5. Heatmap data (for the calendar: exactly 53 weeks * 7 days = 371 days, aligned Sunday to Saturday)
+  const heatmapData: { dateStr: string; count: number; minutes: number; prompts: number }[] = [];
+  
+  const endDate = new Date(today);
+  const dayOfWeek = today.getDay(); // 0 is Sunday, 6 is Saturday
+  endDate.setDate(today.getDate() + (6 - dayOfWeek)); // align to current Saturday
+
+  const startDate = new Date(endDate);
+  startDate.setDate(endDate.getDate() - 370); // go back 53 weeks (370 days back from Saturday is a Sunday)
+
+  for (let i = 0; i < 371; i++) {
+    const d = new Date(startDate);
+    d.setDate(startDate.getDate() + i);
+    const dStr = getLocalDateString(d);
+    heatmapData.push({
+      dateStr: dStr,
+      count: dailyMap[dStr]?.sessionCount || 0,
+      minutes: dailyMap[dStr]?.minutes || 0,
+      prompts: dailyMap[dStr]?.promptCount || 0
+    });
+  }
+
+  return {
+    currentStreak,
+    longestStreak,
+    totalActiveDays: activeDates.length,
+    weeklyConsistencyPercent,
+    dailyMap,
+    heatmapData,
+    last14DaysData
+  };
+}
+

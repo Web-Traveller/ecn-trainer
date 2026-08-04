@@ -1,0 +1,11 @@
+{
+  "version": "2.1.0",
+  "notes": "Version 2.1.0: Added secure device tracking, licensing overlay support, and silent check-ins.",
+  "pub_date": "2026-08-04T06:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTeE1CZlliMGtlTlB4Z1Fab3hYalk1T2NhVW90U0V6S2NtbE5JWVNZQmZ3UlMrUzBFMGt0SEJNMkx3VW9wQ0VzZ0pZYjdiVFcyUXNGZmdQMzgzaWxVYXZHc0N2UTFlRFFNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1ODA4NTAzCWZpbGU6RUNOIEV4ZWN1dGlvbiBUcmFpbmVyXzIuMS4wX3g2NC1zZXR1cC5leGUKWE5Dc29CeW9PV0JMUWpkSGllV2FpSkpyK0Evdzg5VVJReS9aM3k4L3F5SWJGNlFZc0RoYXE0TnFRN24vVTBJdzJ3cDlNaUdkTUJiUWJDcTJBbzV4Q1E9PQo=",
+      "url": "https://tvjlahqfmjprgmntryea.supabase.co/storage/v1/object/public/releases/ECN%20Execution%20Trainer_2.1.0_x64-setup.exe"
+    }
+  }
+}

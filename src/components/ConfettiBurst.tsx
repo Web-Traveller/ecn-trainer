@@ -53,7 +53,7 @@ export const ConfettiBurst: React.FC<{ durationMs?: number }> = ({
     }
 
     let animationFrameId: number;
-    let startTime = performance.now();
+    const startTime = performance.now();
 
     const render = (now: number) => {
       const elapsed = now - startTime;

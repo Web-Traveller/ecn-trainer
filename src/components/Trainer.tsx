@@ -5,6 +5,7 @@ import { useLiveTimer } from '../hooks/useLiveTimer';
 import { processInput } from '../core/routing';
 import { getAllEcns } from '../core/learning';
 import type { ECN } from '../types';
+import { ConfettiBurst } from './ConfettiBurst';
 
 export const Trainer: React.FC = () => {
   // Activate keyboard event listener hook
@@ -25,6 +26,7 @@ export const Trainer: React.FC = () => {
     spaceResetsInCurrentPrompt,
     keyBindings,
     routingConfig,
+    sessions,
     
     // Config states
     mode,
@@ -136,6 +138,33 @@ export const Trainer: React.FC = () => {
   const averageTimeMs = totalPrompts > 0 ? reactionTimes.reduce((a, b) => a + b, 0) / totalPrompts : 0;
   const fastestTimeMs = totalPrompts > 0 ? Math.min(...reactionTimes) : 0;
   const slowestTimeMs = totalPrompts > 0 ? Math.max(...reactionTimes) : 0;
+
+  // --- DETECT NEW PERSONAL BEST ---
+  const hasMinSessions = sessions.length >= 5;
+  let isNewBestAccuracy = false;
+  let isNewBestSpeed = false;
+
+  if (hasMinSessions && sessionState === 'COMPLETED') {
+    const pastSessions = sessions.slice(1);
+    
+    // Best past accuracy
+    const bestPastAccuracy = pastSessions.length > 0 
+      ? Math.max(...pastSessions.map((s) => s.accuracy)) 
+      : 0;
+
+    // Best past speed (average reaction time in milliseconds)
+    const bestPastSpeed = pastSessions.length > 0 
+      ? Math.min(...pastSessions.map((s) => s.averageTime)) 
+      : Infinity;
+
+    // Trigger Accuracy Personal Best if current accuracy exceeds best past, and is at least 80%
+    isNewBestAccuracy = finalAccuracy > bestPastAccuracy && finalAccuracy >= 80;
+
+    // Trigger Speed Personal Best if current speed is faster than best past, and accuracy is at least 90%
+    isNewBestSpeed = averageTimeMs > 0 && averageTimeMs < bestPastSpeed && finalAccuracy >= 90;
+  }
+
+  const isCelebration = isNewBestAccuracy || isNewBestSpeed;
 
   // Most common mistakes
   const mistakeCounts: { [key: string]: { expected: string; actual: string; count: number } } = {};
@@ -598,7 +627,27 @@ export const Trainer: React.FC = () => {
   // --- 2. SUMMARY VIEW: COMPLETED OR TERMINATED ---
   if (sessionState === 'COMPLETED' || sessionState === 'TERMINATED') {
     return (
-      <div key="trainer-results" className="w-full max-w-4xl mx-auto space-y-5 animate-fadeIn">
+      <div key="trainer-results" className="w-full max-w-4xl mx-auto space-y-5 animate-fadeIn relative">
+        {/* Confetti celebration for new personal bests */}
+        {isCelebration && <ConfettiBurst durationMs={5000} />}
+
+        {/* Celebration Announcement Banner */}
+        {isCelebration && (
+          <div className="bg-terminal-panel border-2 border-success-green p-4 text-center font-mono space-y-1.5 shadow-[0_0_20px_rgba(0,200,83,0.2)] animate-pulse relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-success-green via-info-blue to-warning-amber" />
+            <h1 className="text-sm font-black text-success-green uppercase tracking-widest flex items-center justify-center gap-2">
+              🏆 🎉 NEW PERSONAL RECORD BROKEN 🎉 🏆
+            </h1>
+            <p className="text-[11px] text-terminal-text uppercase leading-normal">
+              {isNewBestAccuracy && isNewBestSpeed
+                ? `INCREASED ACCURACY AND REDUCED RESPONSE LATENCY TO ${finalAccuracy.toFixed(1)}% / ${(averageTimeMs / 1000).toFixed(3)}s!`
+                : isNewBestAccuracy
+                ? `KEYBOARD PRECISION TARGET REACHED AT A NEW PEAK ACCURACY OF ${finalAccuracy.toFixed(1)}%!`
+                : `RESPONSE LATENCY OPTIMIZED TO A NEW RECORD MEAN OF ${(averageTimeMs / 1000).toFixed(3)}s AVERAGE SPEED!`}
+            </p>
+          </div>
+        )}
+
         <div className="bg-terminal-panel border border-terminal-border p-4">
           <div className="flex justify-between items-center">
             <h2 className="text-base font-bold font-mono tracking-wider text-terminal-text uppercase">

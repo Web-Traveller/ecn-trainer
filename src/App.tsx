@@ -14,6 +14,9 @@ import {
   FiStar,
 } from "react-icons/fi";
 
+import { useLicenseStore } from "./store/licenseStore";
+import { LicensingOverlay } from "./components/LicensingOverlay";
+
 const GITHUB_URL = "https://github.com/AjinkyaK03";
 const LINKEDIN_URL = "https://linkedin.com/in/ajinkya-kadam-5829b5245";
 
@@ -25,8 +28,13 @@ export const App: React.FC = () => {
   const sessionState = useTrainerStore((state) => state.sessionState);
   const setView = useTrainerStore((state) => state.setView);
 
+  const initializeLicense = useLicenseStore((state) => state.initialize);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [triggerConfetti, setTriggerConfetti] = useState(false);
+
+  useEffect(() => {
+    initializeLicense();
+  }, [initializeLicense]);
 
   // Check if golden title is currently active within 7-day expiration window
   const [goldenTitle, setGoldenTitle] = useState(() => {
@@ -39,6 +47,20 @@ export const App: React.FC = () => {
   });
 
   const keyBufferRef = useRef<string>("");
+
+  const triggerSignatureEffect = () => {
+    setGoldenTitle(true);
+    setTriggerConfetti(true);
+
+    // Save 7-day expiration timestamp to localStorage
+    const expiresAt = Date.now() + SEVEN_DAYS_MS;
+    localStorage.setItem("ecn_golden_title_expires", String(expiresAt));
+
+    // Confetti burst lasts 4 seconds
+    setTimeout(() => {
+      setTriggerConfetti(false);
+    }, 4000);
+  };
 
   // Name Hotkey Signature Listener: Typing "AJINKYA" triggers Confetti + 7-Day Golden Crown Title!
   useEffect(() => {
@@ -78,19 +100,15 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  const triggerSignatureEffect = () => {
-    setGoldenTitle(true);
-    setTriggerConfetti(true);
+  const licenseState = useLicenseStore((state) => state.state);
 
-    // Save 7-day expiration timestamp to localStorage
-    const expiresAt = Date.now() + SEVEN_DAYS_MS;
-    localStorage.setItem("ecn_golden_title_expires", String(expiresAt));
-
-    // Confetti burst lasts 4 seconds
-    setTimeout(() => {
-      setTriggerConfetti(false);
-    }, 4000);
-  };
+  if (licenseState !== 'open') {
+    return (
+      <div className="min-h-screen bg-terminal-bg flex items-center justify-center font-mono">
+        <LicensingOverlay />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-terminal-bg text-terminal-text flex flex-col font-sans selection:bg-terminal-border selection:text-terminal-text relative">
@@ -104,12 +122,12 @@ export const App: React.FC = () => {
             <span className="font-bold font-mono tracking-wider flex items-center gap-1.5 select-none">
               {goldenTitle ? (
                 <span className="text-amber-400 font-bold flex items-center gap-1.5 animate-pulse">
-                  👑 ECN EXECUTION TERMINAL v2.0
+                  👑 ECN EXECUTION TERMINAL v2.1.0
                 </span>
               ) : (
                 <span className="text-terminal-text flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 bg-info-blue inline-block"></span>
-                  ECN EXECUTION TERMINAL v2.0
+                  ECN EXECUTION TERMINAL v2.1.0
                 </span>
               )}
             </span>
@@ -155,6 +173,7 @@ export const App: React.FC = () => {
               >
                 [05] Settings
               </button>
+
             </nav>
           </div>
 
@@ -315,6 +334,8 @@ export const App: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      <LicensingOverlay />
     </div>
   );
 };

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useTrainerStore } from '../store/trainerStore';
-import { calculateGlobalStats } from '../core/analytics';
+import { calculateGlobalStats, calculatePracticeHabitStats } from '../core/analytics';
+
+import { ActivityBarChart } from './ActivityBarChart';
 
 // Helper to format training duration
 const formatDuration = (ms: number): string => {
@@ -90,7 +92,7 @@ const SVGChart: React.FC<SVGChartProps> = ({
     points.push({ x, y });
   });
 
-  const pathD = points.length > 0 
+  const pathD = points.length > 0
     ? `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')
     : '';
 
@@ -216,6 +218,46 @@ export const GlobalAnalyticsDashboard: React.FC = () => {
   const sessions = useTrainerStore((state) => state.sessions);
   const setView = useTrainerStore((state) => state.setView);
   const stats = calculateGlobalStats(sessions);
+  const habitStats = calculatePracticeHabitStats(sessions);
+
+  const getLocalDateString = (dateObj: Date): string => {
+    const yyyy = dateObj.getFullYear();
+    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dd = String(dateObj.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const todayStr = getLocalDateString(new Date());
+  const todaySummary = habitStats.dailyMap[todayStr] || {
+    dateStr: todayStr,
+    minutes: 0,
+    sessionCount: 0,
+    promptCount: 0,
+    correctCount: 0,
+    totalTimeMs: 0,
+    accuracy: 0,
+    avgSpeedSeconds: 0
+  };
+
+  const todayFormatted = new Date().toLocaleDateString(undefined, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const formatMins = (minsVal: number): string => {
+    if (!minsVal || minsVal <= 0) return '0s';
+    const totalSecs = Math.floor(minsVal * 60);
+    const hrs = Math.floor(totalSecs / 3600);
+    const m = Math.floor((totalSecs % 3600) / 60);
+    const s = totalSecs % 60;
+    if (hrs > 0) return `${hrs}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
+
 
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
 
@@ -243,6 +285,7 @@ export const GlobalAnalyticsDashboard: React.FC = () => {
             Monitor lifetime stats, progress charts, ECN statistics, and configurations.
           </p>
         </div>
+
         <button
           onClick={() => setView('trainer')}
           className="px-4 py-2 bg-success-green hover:bg-success-green/90 text-terminal-bg font-black font-mono text-xs cursor-pointer border-0 uppercase"
@@ -258,60 +301,72 @@ export const GlobalAnalyticsDashboard: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* 2. Quick Metrics Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
-            <div className="bg-terminal-panel border border-terminal-border p-4 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1 h-full bg-info-blue" />
-              <span className="text-[9px] text-terminal-muted uppercase block font-bold">LIFETIME ACCURACY</span>
-              <strong className="text-2xl font-bold text-terminal-text block mt-1">
-                {stats.overallAccuracy.toFixed(1)}%
-              </strong>
-              <span className="text-[10px] text-terminal-muted">
-                {stats.totalCorrect} correct / {stats.totalPrompts} total
-              </span>
-            </div>
+          {/* A. Today's Practice Highlights Panel (Moved to the very top) */}
+          <div className="bg-terminal-panel border-2 border-success-green shadow-[0_0_15px_rgba(0,200,83,0.15)] p-4 font-mono relative overflow-hidden">
+            <div className="space-y-3">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-terminal-border pb-2.5">
+                <div>
+                  <span className="text-[10px] text-terminal-muted uppercase block font-bold">SYSTEM LOCAL DATE</span>
+                  <h3 className="text-sm font-bold text-terminal-text uppercase tracking-wider mt-0.5">
+                    📅 {todayFormatted}
+                  </h3>
+                </div>
+                <div className="mt-2 md:mt-0 bg-success-green/10 border border-success-green/30 text-success-green font-bold text-xs py-1 px-3">
+                  {todaySummary.sessionCount > 0 ? "TRAINING ACTIVE TODAY" : "NO WORKOUT YET TODAY"}
+                </div>
+              </div>
 
-            <div className="bg-terminal-panel border border-terminal-border p-4 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1 h-full bg-warning-amber" />
-              <span className="text-[9px] text-terminal-muted uppercase block font-bold">AVERAGE SPEED</span>
-              <strong className="text-2xl font-bold text-info-blue block mt-1">
-                {stats.overallAverageSpeedSeconds.toFixed(3)}s
-              </strong>
-              <span className="text-[10px] text-terminal-muted">
-                Reaction latency across all trials
-              </span>
-            </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+                <div className="bg-terminal-bg/50 border border-terminal-border/80 p-3 space-y-1">
+                  <span className="text-[10px] text-terminal-muted block font-bold uppercase">TODAY'S TOTAL TIME</span>
+                  <strong className="text-xl md:text-2xl font-black text-success-green block tracking-tight">
+                    {formatMins(todaySummary.minutes)}
+                  </strong>
+                  <span className="text-[10px] text-terminal-muted/75">Active workout time</span>
+                </div>
 
-            <div className="bg-terminal-panel border border-terminal-border p-4 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1 h-full bg-success-green" />
-              <span className="text-[9px] text-terminal-muted uppercase block font-bold">TOTAL TRAINING TIME</span>
-              <strong className="text-2xl font-bold text-success-green block mt-1">
-                {formatDuration(stats.totalTrainingTimeMs)}
-              </strong>
-              <span className="text-[10px] text-terminal-muted">
-                Across {stats.totalSessions} completed runs
-              </span>
-            </div>
+                <div className="bg-terminal-bg/50 border border-terminal-border/80 p-3 space-y-1">
+                  <span className="text-[10px] text-terminal-muted block font-bold uppercase">TODAY'S SESSIONS</span>
+                  <strong className="text-xl md:text-2xl font-black text-info-blue block tracking-tight">
+                    {todaySummary.sessionCount} runs
+                  </strong>
+                  <span className="text-[10px] text-terminal-muted/75">Runs saved to registry</span>
+                </div>
 
-            <div className="bg-terminal-panel border border-terminal-border p-4 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1 h-full bg-terminal-muted" />
-              <span className="text-[9px] text-terminal-muted uppercase block font-bold">AVERAGE SESSION</span>
-              <strong className="text-2xl font-bold text-terminal-text block mt-1">
-                {formatDuration(stats.averageSessionDurationMs)}
-              </strong>
-              <span className="text-[10px] text-terminal-muted">
-                Avg {stats.averagePromptsPerSession.toFixed(0)} prompts per session
-              </span>
+                <div className="bg-terminal-bg/50 border border-terminal-border/80 p-3 space-y-1">
+                  <span className="text-[10px] text-terminal-muted block font-bold uppercase">TODAY'S PROMPTS</span>
+                  <strong className="text-xl md:text-2xl font-black text-warning-amber block tracking-tight">
+                    {todaySummary.promptCount} keypresses
+                  </strong>
+                  <span className="text-[10px] text-terminal-muted/75">Trials practiced</span>
+                </div>
+
+                <div className="bg-terminal-bg/50 border border-terminal-border/80 p-3 space-y-1">
+                  <span className="text-[10px] text-terminal-muted block font-bold uppercase">TODAY'S LATENCY & ACC</span>
+                  <strong className="text-lg md:text-xl font-black text-terminal-text block tracking-tight mt-0.5">
+                    {todaySummary.promptCount > 0 ? (
+                      <>
+                        <span className="text-success-green">{todaySummary.accuracy.toFixed(1)}%</span>
+                        <span className="text-terminal-muted/50 mx-1">/</span>
+                        <span className="text-info-blue">{todaySummary.avgSpeedSeconds.toFixed(3)}s</span>
+                      </>
+                    ) : (
+                      <span className="text-terminal-muted">0.0% / 0.000s</span>
+                    )}
+                  </strong>
+                  <span className="text-[10px] text-terminal-muted/75">Avg Accuracy / Speed</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* 3. SVG Line Charts */}
+          {/* B. Analytics Performance Charts */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <SVGChart
               data={accuracyData}
               dates={chartDates}
               title="ACCURACY TRENDS OVER TIME"
-              color="#00C853" // success green
+              color="#00C853"
               gradientId="accuracyGradient"
               yMin={0}
               yMax={100}
@@ -322,12 +377,62 @@ export const GlobalAnalyticsDashboard: React.FC = () => {
               data={speedData}
               dates={chartDates}
               title="SPEED TRENDS OVER TIME (LOWER IS FASTER)"
-              color="#2196F3" // info blue
+              color="#2196F3"
               gradientId="speedGradient"
               yMin={speedMin}
               yMax={speedMax}
               valueFormatter={(v) => `${v.toFixed(2)}s`}
             />
+          </div>
+
+          {/* Side-by-side Layout: Bar Chart on Left, Stacked Metrics on Right */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <div className="lg:col-span-8">
+              <ActivityBarChart
+                data={habitStats.last14DaysData}
+                title="Practice Minutes (Last 14 Days)"
+              />
+            </div>
+            <div className="lg:col-span-4 flex flex-col gap-4">
+              <div className="bg-terminal-panel border border-terminal-border p-4 relative overflow-hidden flex-1 flex items-center justify-between gap-4">
+                <div className="absolute top-0 left-0 w-1 h-full bg-info-blue" />
+                <div className="space-y-1">
+                  <span className="text-[9px] text-terminal-muted uppercase block font-bold tracking-wider">LIFETIME ACCURACY</span>
+                  <span className="text-[10px] text-terminal-muted block">
+                    {stats.totalCorrect} / {stats.totalPrompts} correct
+                  </span>
+                </div>
+                <strong className="text-3xl font-black text-terminal-text tracking-tight shrink-0">
+                  {stats.overallAccuracy.toFixed(1)}%
+                </strong>
+              </div>
+
+              <div className="bg-terminal-panel border border-terminal-border p-4 relative overflow-hidden flex-1 flex items-center justify-between gap-4">
+                <div className="absolute top-0 left-0 w-1 h-full bg-warning-amber" />
+                <div className="space-y-1">
+                  <span className="text-[9px] text-terminal-muted uppercase block font-bold tracking-wider">AVERAGE SPEED</span>
+                  <span className="text-[10px] text-terminal-muted block">
+                    Reaction latency per trial
+                  </span>
+                </div>
+                <strong className="text-3xl font-black text-info-blue tracking-tight shrink-0">
+                  {stats.overallAverageSpeedSeconds.toFixed(3)}s
+                </strong>
+              </div>
+
+              <div className="bg-terminal-panel border border-terminal-border p-4 relative overflow-hidden flex-1 flex items-center justify-between gap-4">
+                <div className="absolute top-0 left-0 w-1 h-full bg-success-green" />
+                <div className="space-y-1">
+                  <span className="text-[9px] text-terminal-muted uppercase block font-bold tracking-wider">TOTAL TRAINING TIME</span>
+                  <span className="text-[10px] text-terminal-muted block">
+                    Across {stats.totalSessions} runs
+                  </span>
+                </div>
+                <strong className="text-2xl font-black text-success-green tracking-tight shrink-0">
+                  {formatDuration(stats.totalTrainingTimeMs)}
+                </strong>
+              </div>
+            </div>
           </div>
 
           {/* 4. Insights Section Grid */}
@@ -515,9 +620,8 @@ export const GlobalAnalyticsDashboard: React.FC = () => {
 
                 <div className="flex justify-between items-center border-b border-terminal-border/20 pb-2">
                   <span className="text-terminal-muted uppercase text-[10px]">ACCURACY TREND (LAST 5)</span>
-                  <span className={`font-bold flex items-center gap-1 ${
-                    stats.accuracyTrend === 'up' ? 'text-success-green' : stats.accuracyTrend === 'down' ? 'text-error-red' : 'text-terminal-text'
-                  }`}>
+                  <span className={`font-bold flex items-center gap-1 ${stats.accuracyTrend === 'up' ? 'text-success-green' : stats.accuracyTrend === 'down' ? 'text-error-red' : 'text-terminal-text'
+                    }`}>
                     {stats.accuracyTrend === 'up' ? '▲' : stats.accuracyTrend === 'down' ? '▼' : '■'}
                     {stats.accuracyTrendValue >= 0 ? `+${stats.accuracyTrendValue.toFixed(1)}%` : `${stats.accuracyTrendValue.toFixed(1)}%`}
                   </span>
@@ -525,9 +629,8 @@ export const GlobalAnalyticsDashboard: React.FC = () => {
 
                 <div className="flex justify-between items-center border-b border-terminal-border/20 pb-2">
                   <span className="text-terminal-muted uppercase text-[10px]">SPEED TREND (LAST 5)</span>
-                  <span className={`font-bold flex items-center gap-1 ${
-                    stats.speedTrend === 'up' ? 'text-success-green' : stats.speedTrend === 'down' ? 'text-error-red' : 'text-terminal-text'
-                  }`}>
+                  <span className={`font-bold flex items-center gap-1 ${stats.speedTrend === 'up' ? 'text-success-green' : stats.speedTrend === 'down' ? 'text-error-red' : 'text-terminal-text'
+                    }`}>
                     {stats.speedTrend === 'up' ? '▲ Speeding up' : stats.speedTrend === 'down' ? '▼ Slowing down' : '■ Flat'}
                   </span>
                 </div>
@@ -611,7 +714,7 @@ export const GlobalAnalyticsDashboard: React.FC = () => {
                 const sIndex = sessions.length - idx;
                 const isExpanded = expandedSessionId === s.id;
                 const duration = s.sessionDurationMs || (s.averageTime * s.events.length) || 0;
-                
+
                 return (
                   <div key={s.id} className="py-2.5">
                     <div
@@ -623,9 +726,8 @@ export const GlobalAnalyticsDashboard: React.FC = () => {
                         <strong className="text-terminal-text">Session Run ({formatDate(s.date)})</strong>
                       </div>
                       <div className="flex items-center gap-4">
-                        <span className={`font-bold ${
-                          s.accuracy >= 90 ? 'text-success-green' : s.accuracy >= 75 ? 'text-warning-amber' : 'text-error-red'
-                        }`}>
+                        <span className={`font-bold ${s.accuracy >= 90 ? 'text-success-green' : s.accuracy >= 75 ? 'text-warning-amber' : 'text-error-red'
+                          }`}>
                           {s.accuracy.toFixed(1)}% Acc
                         </span>
                         <span className="text-info-blue">{(s.averageTime / 1000).toFixed(3)}s</span>
@@ -688,8 +790,8 @@ export const GlobalAnalyticsDashboard: React.FC = () => {
                           <div className="flex justify-between py-0.5">
                             <span className="text-terminal-muted">Target ECN Mode:</span>
                             <span className="text-terminal-text font-bold">
-                              {s.targetEcnModeEnabled 
-                                ? `ENABLED (${s.targetEcns && s.targetEcns.length > 0 ? s.targetEcns.join(', ') : (s.targetEcn || 'N/A')})` 
+                              {s.targetEcnModeEnabled
+                                ? `ENABLED (${s.targetEcns && s.targetEcns.length > 0 ? s.targetEcns.join(', ') : (s.targetEcn || 'N/A')})`
                                 : 'DISABLED'}
                             </span>
                           </div>
