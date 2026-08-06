@@ -122,6 +122,7 @@ interface TrainerState {
 
   // Cleanup
   clearHistory: () => void;
+  setSessions: (sessions: Session[]) => void;
 }
 
 const savedSettings = loadSettingsFromStorage();
@@ -509,6 +510,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
       missedCount: 0
     });
   },
+  setSessions: (sessions) => set({ sessions }),
 
   nextPrompt: () => {
     const { sessionLength, currentSessionEvents, ecnWeights, targetEcnModeEnabled, targetEcns, mode, priceTrainingEnabled, routingConfig, priceRangeMode, minPriceAdjustment, maxPriceAdjustment } = get();

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
+import { check } from '@tauri-apps/plugin-updater'
 import {
   fetchAppConfig,
   checkDevice,
@@ -29,12 +30,48 @@ interface LicenseStore {
   errorMessage: string | null
   licenseExpiry: string | null
   
+  devTriggerWord: string | null
+  devPasscode: string | null
+  allowDevMode: boolean
+
   initialize: () => Promise<void>
   activateKey: (key: string) => Promise<{ success: boolean; message: string }>
   checkUpdateStatus: () => Promise<void>
 }
 
-const APP_VERSION = '2.1.0' // Matches version in tauri.conf.json
+async function checkAndApplySilentUpdate(forceUpdate: boolean) {
+  try {
+    if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      const update = await check();
+      if (update) {
+        console.log('[UPDATER] Found new update:', update.version);
+        if (forceUpdate) {
+          console.log('[UPDATER] Force update active. Downloading and installing immediately...');
+          await update.downloadAndInstall();
+        } else {
+          console.log('[UPDATER] Normal update. Downloading in background...');
+          await update.download();
+          console.log('[UPDATER] Download completed. Binding installation to app exit...');
+          try {
+            const { getCurrentWindow } = await import('@tauri-apps/api/window');
+            const appWindow = getCurrentWindow();
+            await appWindow.onCloseRequested(async (event) => {
+              console.log('[UPDATER] Applying update silently on exit...');
+              event.preventDefault();
+              await update.install();
+            });
+          } catch (windowErr) {
+            console.error('[UPDATER] Failed to register window exit updater hook:', windowErr);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[UPDATER] Silent update check failed:', err);
+  }
+}
+
+const APP_VERSION = '2.1.2' // Matches version in tauri.conf.json
 const OFFLINE_LIMIT_MS = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
 
 export const useLicenseStore = create<LicenseStore>((set, get) => {
@@ -57,6 +94,9 @@ export const useLicenseStore = create<LicenseStore>((set, get) => {
     organization: null,
     errorMessage: null,
     licenseExpiry: null,
+    devTriggerWord: null,
+    devPasscode: null,
+    allowDevMode: false,
 
     initialize: async () => {
       // Run silently in background without showing "checking..." spinner to the user
@@ -91,7 +131,18 @@ export const useLicenseStore = create<LicenseStore>((set, get) => {
 
         if (config) {
           // ONLINE MODE
-          set({ latestVersion: config.latest_version })
+          set({ 
+            latestVersion: config.latest_version,
+            devTriggerWord: config.dev_trigger_word || 'MOCK',
+            devPasscode: config.dev_passcode || '2026'
+          })
+          localStorage.setItem('ecn_dev_trigger', config.dev_trigger_word || 'MOCK')
+          localStorage.setItem('ecn_dev_passcode', config.dev_passcode || '2026')
+
+          // Silently check and install updates in the background
+          checkAndApplySilentUpdate(config.force_update).catch((err) => {
+            console.error('[UPDATER] Background update error:', err);
+          });
 
           // Check if device is registered
           let device = await checkDevice(deviceId)
@@ -100,6 +151,11 @@ export const useLicenseStore = create<LicenseStore>((set, get) => {
           } else {
             // Update details if they changed (e.g. computer name or OS update) and bump last_seen
             await updateDeviceLastSeen(deviceId)
+          }
+
+          if (device) {
+            set({ allowDevMode: !!device.allow_dev_mode })
+            localStorage.setItem('ecn_allow_dev', device.allow_dev_mode ? 'true' : 'false')
           }
 
           // Write the current timestamp to Rust secure local storage to reset the 7-day offline clock
@@ -201,6 +257,9 @@ export const useLicenseStore = create<LicenseStore>((set, get) => {
           const cachedKey = localStorage.getItem('ecn_license_key')
           const cachedOrg = localStorage.getItem('ecn_license_org')
           const cachedExpiry = localStorage.getItem('ecn_license_expiry')
+          const cachedTrigger = localStorage.getItem('ecn_dev_trigger') || 'MOCK'
+          const cachedPasscode = localStorage.getItem('ecn_dev_passcode') || '2026'
+          const cachedAllowDev = localStorage.getItem('ecn_allow_dev') === 'true'
 
           // If a license key was previously required and active, check if it was cached
           // Note: If licensing was disabled last time, we allow offline boot
@@ -208,6 +267,9 @@ export const useLicenseStore = create<LicenseStore>((set, get) => {
             licenseKey: cachedKey,
             organization: cachedOrg,
             licenseExpiry: cachedExpiry || null,
+            devTriggerWord: cachedTrigger,
+            devPasscode: cachedPasscode,
+            allowDevMode: cachedAllowDev
           })
         }
       } catch (err) {

@@ -78,6 +78,26 @@ fn write_secure_timestamp(app_handle: tauri::AppHandle, timestamp: i64) -> Resul
   Ok(())
 }
 
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+  #[cfg(target_os = "windows")]
+  {
+    std::process::Command::new("cmd")
+      .args(["/C", "start", &url])
+      .spawn()
+      .map_err(|e| e.to_string())?;
+  }
+  #[cfg(not(target_os = "windows"))]
+  {
+    let cmd = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    std::process::Command::new(cmd)
+      .arg(&url)
+      .spawn()
+      .map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -96,7 +116,8 @@ pub fn run() {
       get_hardware_uid,
       get_system_info,
       read_secure_timestamp,
-      write_secure_timestamp
+      write_secure_timestamp,
+      open_external_url
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

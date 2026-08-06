@@ -2,8 +2,10 @@ import React from 'react';
 import { useTrainerStore } from '../store/trainerStore';
 import { ECNGroupManager } from './ECNGroupManager';
 import { getAllEcns } from '../core/learning';
+import { useLicenseStore } from '../store/licenseStore';
 
 export const Settings: React.FC = () => {
+  const { appVersion, deviceId } = useLicenseStore();
   const {
     submissionMethod,
     cancelMethod,
@@ -32,13 +34,19 @@ export const Settings: React.FC = () => {
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 animate-fadeIn font-mono">
       {/* Title */}
-      <div className="bg-terminal-panel border border-terminal-border p-4">
-        <h2 className="text-base font-bold tracking-wider text-terminal-text uppercase">
-          [SETTINGS_MANAGER] - TERMINAL & ROUTING CONFIGURATION
-        </h2>
-        <p className="text-xs text-terminal-muted mt-0.5">
-          Configure custom ECN groups, hotkeys, price movement ranges, and training defaults.
-        </p>
+      <div className="bg-terminal-panel border border-terminal-border p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-base font-bold tracking-wider text-terminal-text uppercase">
+            [SETTINGS_MANAGER] - TERMINAL & ROUTING CONFIGURATION
+          </h2>
+          <p className="text-xs text-terminal-muted mt-0.5">
+            Configure custom ECN groups, hotkeys, price movement ranges, and training defaults.
+          </p>
+        </div>
+        <div className="flex flex-col text-left md:text-right font-mono text-[10px] text-terminal-muted border-t md:border-t-0 md:border-l border-terminal-border pt-2 md:pt-0 md:pl-4 self-stretch md:self-auto justify-center">
+          <div>APP VERSION: <span className="text-terminal-text font-bold">{appVersion}</span></div>
+          <div className="mt-1">DEVICE ID: <span className="text-terminal-text font-mono font-bold select-all bg-terminal-bg/50 px-1 border border-terminal-border/45 break-all">{deviceId || 'Not Initialized'}</span></div>
+        </div>
       </div>
 
       {/* CUSTOM ECN & HOTKEY MANAGER */}

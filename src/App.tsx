@@ -16,6 +16,8 @@ import {
 
 import { useLicenseStore } from "./store/licenseStore";
 import { LicensingOverlay } from "./components/LicensingOverlay";
+import { AdminConsoleModal } from "./components/AdminConsoleModal";
+import { invoke } from "@tauri-apps/api/core";
 
 const GITHUB_URL = "https://github.com/AjinkyaK03";
 const LINKEDIN_URL = "https://linkedin.com/in/ajinkya-kadam-5829b5245";
@@ -29,8 +31,23 @@ export const App: React.FC = () => {
   const setView = useTrainerStore((state) => state.setView);
 
   const initializeLicense = useLicenseStore((state) => state.initialize);
+
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [triggerConfetti, setTriggerConfetti] = useState(false);
+  const [showAdminConsole, setShowAdminConsole] = useState(false);
+
+  const openExternal = async (url: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
+        await invoke("open_external_url", { url });
+      } else {
+        window.open(url, "_blank");
+      }
+    } catch (err) {
+      console.error("Failed to open external url:", err);
+    }
+  };
 
   useEffect(() => {
     initializeLicense();
@@ -47,6 +64,7 @@ export const App: React.FC = () => {
   });
 
   const keyBufferRef = useRef<string>("");
+  const mockBufferRef = useRef<string>("");
 
   const triggerSignatureEffect = () => {
     setGoldenTitle(true);
@@ -83,13 +101,26 @@ export const App: React.FC = () => {
         return;
       }
 
-      // Sequence buffer check for "AJINKYA"
+      // Sequence buffer check
       const key = e.key.toUpperCase();
       if (key.length === 1 && key >= "A" && key <= "Z") {
+        // AJINKYA sequence check
         keyBufferRef.current = (keyBufferRef.current + key).slice(-7);
         if (keyBufferRef.current === "AJINKYA") {
           triggerSignatureEffect();
           keyBufferRef.current = "";
+        }
+
+        // Dynamic Dev Mode trigger check
+        const licState = useLicenseStore.getState();
+        if (licState.allowDevMode && licState.devTriggerWord) {
+          const trigger = licState.devTriggerWord.toUpperCase();
+          const wordLen = trigger.length;
+          mockBufferRef.current = (mockBufferRef.current + key).slice(-wordLen);
+          if (mockBufferRef.current === trigger) {
+            setShowAdminConsole(true);
+            mockBufferRef.current = "";
+          }
         }
       }
     };
@@ -113,7 +144,7 @@ export const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-terminal-bg text-terminal-text flex flex-col font-sans selection:bg-terminal-border selection:text-terminal-text relative">
       {/* Golden Confetti Particle Burst (4 Seconds) */}
-      {triggerConfetti && <ConfettiBurst durationMs={4000} />}
+      {triggerConfetti && <ConfettiBurst durationMs={5000} />}
 
       {/* Top Menu / Status Bar */}
       <header className="border-b border-terminal-border bg-terminal-panel">
@@ -122,12 +153,12 @@ export const App: React.FC = () => {
             <span className="font-bold font-mono tracking-wider flex items-center gap-1.5 select-none">
               {goldenTitle ? (
                 <span className="text-amber-400 font-bold flex items-center gap-1.5 animate-pulse">
-                  👑 ECN EXECUTION TERMINAL v2.1.0
+                  👑 ECN EXECUTION TERMINAL v2.1
                 </span>
               ) : (
                 <span className="text-terminal-text flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 bg-info-blue inline-block"></span>
-                  ECN EXECUTION TERMINAL v2.1.0
+                  ECN EXECUTION TERMINAL v2.1
                 </span>
               )}
             </span>
@@ -135,41 +166,37 @@ export const App: React.FC = () => {
             <nav className="flex items-center border-l border-terminal-border pl-6 gap-2">
               <button
                 onClick={() => setView("dashboard")}
-                className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${
-                  currentView === "dashboard"
-                    ? "bg-terminal-border border-terminal-border text-white font-bold"
-                    : "border-transparent text-terminal-muted"
-                }`}
+                className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${currentView === "dashboard"
+                  ? "bg-terminal-border border-terminal-border text-white font-bold"
+                  : "border-transparent text-terminal-muted"
+                  }`}
               >
                 [01] Dashboard
               </button>
               <button
                 onClick={() => setView("trainer")}
-                className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${
-                  currentView === "trainer"
-                    ? "bg-terminal-border border-terminal-border text-white font-bold"
-                    : "border-transparent text-terminal-muted"
-                }`}
+                className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${currentView === "trainer"
+                  ? "bg-terminal-border border-terminal-border text-white font-bold"
+                  : "border-transparent text-terminal-muted"
+                  }`}
               >
                 [02] Trainer
               </button>
               <button
                 onClick={() => setView("analytics")}
-                className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${
-                  currentView === "analytics"
-                    ? "bg-terminal-border border-terminal-border text-white font-bold"
-                    : "border-transparent text-terminal-muted"
-                }`}
+                className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${currentView === "analytics"
+                  ? "bg-terminal-border border-terminal-border text-white font-bold"
+                  : "border-transparent text-terminal-muted"
+                  }`}
               >
                 [03] Analytics
               </button>
               <button
                 onClick={() => setView("settings")}
-                className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${
-                  currentView === "settings"
-                    ? "bg-terminal-border border-terminal-border text-white font-bold"
-                    : "border-transparent text-terminal-muted"
-                }`}
+                className={`px-3 py-1 font-mono uppercase tracking-tight hover:bg-terminal-border/40 transition-colors cursor-pointer border ${currentView === "settings"
+                  ? "bg-terminal-border border-terminal-border text-white font-bold"
+                  : "border-transparent text-terminal-muted"
+                  }`}
               >
                 [05] Settings
               </button>
@@ -272,8 +299,7 @@ export const App: React.FC = () => {
               <div className="flex items-center gap-3">
                 <a
                   href={GITHUB_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  onClick={(e) => openExternal(GITHUB_URL, e)}
                   className="flex items-center gap-1.5 px-3 py-1 bg-terminal-bg border border-terminal-border hover:border-info-blue text-terminal-text hover:text-info-blue transition-colors font-bold text-[11px]"
                 >
                   <FiGithub />
@@ -281,8 +307,7 @@ export const App: React.FC = () => {
                 </a>
                 <a
                   href={LINKEDIN_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  onClick={(e) => openExternal(LINKEDIN_URL, e)}
                   className="flex items-center gap-1.5 px-3 py-1 bg-terminal-bg border border-terminal-border hover:border-info-blue text-terminal-text hover:text-info-blue transition-colors font-bold text-[11px]"
                 >
                   <FiLinkedin />
@@ -312,8 +337,7 @@ export const App: React.FC = () => {
 
             <a
               href={GITHUB_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={(e) => openExternal(GITHUB_URL, e)}
               className="hover:text-terminal-text transition-colors flex items-center gap-1"
               title="GitHub Profile"
             >
@@ -323,8 +347,7 @@ export const App: React.FC = () => {
 
             <a
               href={LINKEDIN_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={(e) => openExternal(LINKEDIN_URL, e)}
               className="hover:text-terminal-text transition-colors flex items-center gap-1"
               title="LinkedIn Profile"
             >
@@ -336,6 +359,7 @@ export const App: React.FC = () => {
       </footer>
 
       <LicensingOverlay />
+      {showAdminConsole && <AdminConsoleModal onClose={() => setShowAdminConsole(false)} />}
     </div>
   );
 };

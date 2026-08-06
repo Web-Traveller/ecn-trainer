@@ -11,6 +11,7 @@ export const LicensingOverlay: React.FC = () => {
     latestVersion,
     activateKey,
     initialize,
+    deviceId,
   } = useLicenseStore()
 
   const [inputKey, setInputKey] = useState('')
@@ -41,7 +42,7 @@ export const LicensingOverlay: React.FC = () => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-terminal-bg/90 backdrop-blur-sm select-none text-terminal-text font-mono">
       <div className="relative w-full max-w-md bg-terminal-panel border border-terminal-border p-8 shadow-2xl font-mono">
-        
+
         {/* Header Indicator */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-terminal-border" />
 
@@ -111,7 +112,7 @@ export const LicensingOverlay: React.FC = () => {
             <p className="text-terminal-text text-xs leading-relaxed">
               {errorMessage || 'Offline grace period exceeded. Please connect to the internet to verify licensing.'}
             </p>
-            
+
             <button
               onClick={() => initialize()}
               className="mt-6 w-full cursor-pointer bg-warning-amber border border-warning-amber hover:bg-warning-amber/80 text-terminal-bg px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors"
@@ -150,7 +151,7 @@ export const LicensingOverlay: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
                 </svg>
               </div>
-              
+
               {state === 'expired' ? (
                 <>
                   <h2 className="text-sm font-bold tracking-wider text-error-red uppercase">
@@ -189,11 +190,10 @@ export const LicensingOverlay: React.FC = () => {
 
               {message && (
                 <div
-                  className={`border px-4 py-2 text-xs leading-relaxed ${
-                    message.type === 'success'
+                  className={`border px-4 py-2 text-xs leading-relaxed ${message.type === 'success'
                       ? 'border-success-green/30 bg-success-green/10 text-success-green'
                       : 'border-error-red/30 bg-error-red/10 text-error-red'
-                  }`}
+                    }`}
                 >
                   {message.text}
                 </div>
@@ -213,8 +213,8 @@ export const LicensingOverlay: React.FC = () => {
                 {activating ? (
                   <span className="flex items-center justify-center gap-2">
                     <svg className="h-4 w-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
                     Validating...
                   </span>
@@ -223,6 +223,14 @@ export const LicensingOverlay: React.FC = () => {
                 )}
               </button>
             </form>
+          </div>
+        )}
+
+        {/* Diagnostics Footer */}
+        {deviceId && (
+          <div className="mt-8 border-t border-terminal-border/20 pt-4 flex flex-col items-center gap-1.5 font-mono text-[9px] text-terminal-muted text-center w-full select-all">
+            <div className="tracking-wider uppercase">Machine UID:</div>
+            <div className="text-terminal-text font-bold select-all bg-terminal-bg/50 px-2 py-0.5 border border-terminal-border/30 max-w-xs break-all">{deviceId}</div>
           </div>
         )}
       </div>

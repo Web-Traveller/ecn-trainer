@@ -15,6 +15,8 @@ export interface AppConfig {
   licensing_enabled: boolean
   latest_version: string
   force_update: boolean
+  dev_trigger_word: string | null
+  dev_passcode: string | null
 }
 
 export interface License {
@@ -33,6 +35,7 @@ export interface Device {
   is_blocked: boolean
   first_seen: string
   last_seen: string
+  allow_dev_mode?: boolean
   licenses?: License // Joined relation
 }
 
