@@ -1,0 +1,11 @@
+{
+  "version": "v2.2.0",
+  "notes": "ECN Execution Trainer v2.2.0 Release - Features: Mathematical Direct Session Injector, Money Rain Celebration Mode, Daily Record Reset, KISS Settings, SHA-256 Hardware Integrity Locking & Rolling Backups.",
+  "pub_date": "2026-08-07T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTeE1CZlliMGtlTkp6cVl0eDNBZFNDU2JDd0dJOG1QK0hINnIrNXM1V1IzcGF2K3IwOXZ2K3ROMkVJVStJZm9uZEZZeElFTFpHWnR6N2VBYjFKUGJ1WWZJMGJhSitpRXdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg2MDU3NzM5CWZpbGU6RUNOIEV4ZWN1dGlvbiBUcmFpbmVyXzIuMi4wX3g2NC1zZXR1cC5leGUKWFhwa1laQjRYV0RPN0V0UnA0LzJBZUhDVlY4dTFiRHVqd24yLzI3RzNEUFh3TTdhWCtHM1BGY2trSDUyUUI3b3NZeHBkQlEwK1ZQUHNLMWltYXpnQ3c9PQo=",
+      "url": "https://github.com/Web-Traveller/ecn-trainer/releases/download/v2.2.0/ECN.Execution.Trainer_2.2.0_x64-setup.exe"
+    }
+  }
+}
