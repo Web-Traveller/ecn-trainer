@@ -64,9 +64,6 @@ export function findTodayGaps(sessions: Session[]): PracticeGap[] {
   return gaps;
 }
 
-/**
- * Helper to generate scrambled mock events from a template session's events
- */
 function generateScrambledEvents(
   templateEvents: SessionEvent[],
   count: number,
@@ -74,38 +71,29 @@ function generateScrambledEvents(
   sessionDurationMs: number
 ): SessionEvent[] {
   const events: SessionEvent[] = [];
-  const eventInterval = sessionDurationMs / count;
+  const eventInterval = sessionDurationMs / Math.max(1, count);
 
-  // Calculate baseline statistics
   const correctEvents = templateEvents.filter((e) => e.correct);
   const baselineAccuracy = templateEvents.length > 0
     ? correctEvents.length / templateEvents.length
-    : 0.90; // Default fallback to 90%
+    : 0.90;
 
   const avgReactionTimeMs = templateEvents.length > 0
     ? templateEvents.reduce((sum, e) => sum + e.reactionTimeMs, 0) / templateEvents.length
-    : 800; // Default fallback to 800ms
+    : 800;
 
   for (let i = 0; i < count; i++) {
-    // Pick a random event from the template to use as a skeleton
     const templateEvent = templateEvents.length > 0
       ? templateEvents[Math.floor(Math.random() * templateEvents.length)]
       : null;
 
-    // Calculate prompt timestamp spaced out across the session
-    const promptTimestamp = Math.floor(sessionStartTime + (i * eventInterval) + (Math.random() * (eventInterval * 0.5)));
-
-    // Generate individual reaction time with ±10% random noise
+    const promptTimestamp = Math.floor(sessionStartTime + (i * eventInterval) + (Math.random() * (eventInterval * 0.4)));
     const reactionTimeMs = Math.floor(avgReactionTimeMs * (0.9 + Math.random() * 0.2));
-
-    // Determine correctness matching the baseline accuracy with a slight random wiggle
     const isCorrect = Math.random() < (baselineAccuracy + (Math.random() * 0.04 - 0.02));
 
-    // Reconstruct prompt and response ECNs
     const expectedEcn = templateEvent?.expectedEcn || ('NSDQ' as ECN);
     const actualEcn = isCorrect ? expectedEcn : (templateEvent?.actualEcn || 'None' as ECN);
 
-    // Build the mock event
     const event: SessionEvent = {
       id: Math.random().toString(36).substring(2, 11),
       timestamp: promptTimestamp,
@@ -141,7 +129,6 @@ function generateScrambledEvents(
   return events;
 }
 
-// Standard human-like session baselines
 export const SESSION_PROFILES = [
   { prompts: 200, durationMs: 16 * 60000 }, // 16 minutes
   { prompts: 150, durationMs: 12 * 60000 }, // 12 minutes
@@ -151,7 +138,7 @@ export const SESSION_PROFILES = [
 ];
 
 /**
- * Calculates the optimal set of standard session sizes that sum to the target fill time.
+ * Calculates optimal fill plan matching target duration accurately.
  */
 export function calculateOptimalFillPlan(targetMs: number): { prompts: number; durationMs: number }[] {
   let remaining = targetMs;
@@ -164,49 +151,40 @@ export function calculateOptimalFillPlan(targetMs: number): { prompts: number; d
     }
   }
 
-  // If there's still a tiny remainder (e.g. 2-3 mins) and nothing added, or just to round it out:
-  if (plan.length === 0 && remaining >= 120000) {
-    plan.push({ prompts: 25, durationMs: 2 * 60000 });
+  // If targetMs is smaller than 2 mins or remaining remainder exists
+  if (plan.length === 0 && targetMs > 0) {
+    const minutes = Math.max(1, Math.round(targetMs / 60000));
+    plan.push({ prompts: Math.round(minutes * 12.5), durationMs: targetMs });
   }
 
   return plan;
 }
 
-/**
- * Injects multiple chronologically non-overlapping mock sessions into a gap
- * to sum up to targetMs. Saves back to localStorage and returns updated session registry.
- */
 export function injectMultiSessionsIntoGap(
   gap: PracticeGap,
   targetMs: number,
   sessions: Session[]
 ): Session[] {
-  // Find template sessions
   const prevSession = sessions.find((s) => s.id === gap.prevSessionId);
   const nextSession = sessions.find((s) => s.id === gap.nextSessionId);
   const template = prevSession || nextSession || sessions[0];
 
   if (!template) return sessions;
 
-  // 1. Calculate how many sessions and their sizes to inject
-  const plan = calculateOptimalFillPlan(targetMs);
+  const actualFillMs = Math.min(targetMs, gap.durationMs);
+  const plan = calculateOptimalFillPlan(actualFillMs);
   const K = plan.length;
   if (K === 0) return sessions;
 
   const totalSessionDuration = plan.reduce((sum, item) => sum + item.durationMs, 0);
-
-  // 2. Distribute break time evenly before, between, and after injected runs
-  const totalBreakTime = gap.durationMs - totalSessionDuration;
+  const totalBreakTime = Math.max(0, gap.durationMs - totalSessionDuration);
   const breakInterval = totalBreakTime / (K + 1);
 
   let newMockSessions: Session[] = [];
   let currentTime = gap.start;
 
-  // 3. Generate each session along the timeline
   for (let i = 0; i < K; i++) {
     const item = plan[i];
-
-    // Shift past the preceding break
     currentTime += breakInterval;
 
     const sessionStartTime = currentTime;
@@ -219,7 +197,6 @@ export function injectMultiSessionsIntoGap(
       item.durationMs
     );
 
-    // Compute averages
     const correctEvents = mockEvents.filter((e) => e.correct);
     const accuracy = (correctEvents.length / mockEvents.length) * 100;
     const averageTime = mockEvents.reduce((sum, e) => sum + e.reactionTimeMs, 0) / mockEvents.length;
@@ -241,7 +218,6 @@ export function injectMultiSessionsIntoGap(
         mistakeCounts[key].count += 1;
       }
     });
-    const mistakeMatrix = Object.values(mistakeCounts).sort((a, b) => b.count - a.count);
 
     const mockSession: Session = {
       id: `mock_${Math.random().toString(36).substring(2, 9)}`,
@@ -257,7 +233,7 @@ export function injectMultiSessionsIntoGap(
       overshootCount,
       resetCount,
       priceAccuracy: template.priceTrainingEnabled ? accuracy : undefined,
-      mistakeMatrix,
+      mistakeMatrix: Object.values(mistakeCounts).sort((a, b) => b.count - a.count),
       targetEcnModeEnabled: template.targetEcnModeEnabled,
       targetEcn: template.targetEcn,
       targetEcns: template.targetEcns,
@@ -271,12 +247,9 @@ export function injectMultiSessionsIntoGap(
     };
 
     newMockSessions.push(mockSession);
-
-    // Advance timeline to end of session
     currentTime = sessionEndTime;
   }
 
-  // 4. Merge, Sort chronological descending and Save
   const updatedSessions = [...newMockSessions, ...sessions].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );

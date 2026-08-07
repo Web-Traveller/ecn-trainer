@@ -6,6 +6,7 @@ import { processInput } from '../core/routing';
 import { getAllEcns } from '../core/learning';
 import type { ECN } from '../types';
 import { ConfettiBurst } from './ConfettiBurst';
+import { MoneyRainBurst } from './MoneyRainBurst';
 
 export const Trainer: React.FC = () => {
   // Activate keyboard event listener hook
@@ -46,6 +47,10 @@ export const Trainer: React.FC = () => {
     speedDecayMs,
     speedPenaltyMs,
     targetStreakLength,
+    flashModeEnabled,
+    flashDurationMs,
+    celebrationEffect,
+    experimentalFeaturesEnabled,
 
     // Run-time pacing state
     countdownRemaining,
@@ -126,6 +131,22 @@ export const Trainer: React.FC = () => {
     };
   }, [sessionState, practiceModeType, countdownRemaining, startTime, currentTimeLimitMs, feedback, handleTimeout]);
 
+  const [isPromptHidden, setIsPromptHidden] = React.useState(false);
+
+  React.useEffect(() => {
+    if (sessionState !== 'RUNNING' || !flashModeEnabled || feedback !== null || countdownRemaining !== null) {
+      setIsPromptHidden(false);
+      return;
+    }
+
+    setIsPromptHidden(false);
+    const timer = setTimeout(() => {
+      setIsPromptHidden(true);
+    }, flashDurationMs || 300);
+
+    return () => clearTimeout(timer);
+  }, [currentPrompt, sessionState, flashModeEnabled, flashDurationMs, feedback, countdownRemaining]);
+
   const [showDebug, setShowDebug] = React.useState(false);
 
   // --- STATS COMPUTATION FOR SUMMARY PAGE ---
@@ -139,29 +160,30 @@ export const Trainer: React.FC = () => {
   const fastestTimeMs = totalPrompts > 0 ? Math.min(...reactionTimes) : 0;
   const slowestTimeMs = totalPrompts > 0 ? Math.max(...reactionTimes) : 0;
 
-  // --- DETECT NEW PERSONAL BEST ---
-  const hasMinSessions = sessions.length >= 5;
+  // --- DETECT TODAY'S PERSONAL RECORD ---
   let isNewBestAccuracy = false;
   let isNewBestSpeed = false;
 
-  if (hasMinSessions && sessionState === 'COMPLETED') {
-    const pastSessions = sessions.slice(1);
+  if (sessionState === 'COMPLETED') {
+    const todayStr = new Date().toISOString().split('T')[0];
     
-    // Best past accuracy
-    const bestPastAccuracy = pastSessions.length > 0 
-      ? Math.max(...pastSessions.map((s) => s.accuracy)) 
-      : 0;
+    // Filter sessions completed earlier today
+    const todayPastSessions = sessions.slice(1).filter((s) => {
+      if (!s.date) return false;
+      const sDateStr = new Date(s.date).toISOString().split('T')[0];
+      return sDateStr === todayStr;
+    });
 
-    // Best past speed (average reaction time in milliseconds)
-    const bestPastSpeed = pastSessions.length > 0 
-      ? Math.min(...pastSessions.map((s) => s.averageTime)) 
-      : Infinity;
+    if (todayPastSessions.length === 0) {
+      // First completed run of today automatically breaks today's record if accuracy >= 70%
+      isNewBestAccuracy = finalAccuracy >= 70;
+    } else {
+      const bestTodayAccuracy = Math.max(...todayPastSessions.map((s) => s.accuracy));
+      const bestTodaySpeed = Math.min(...todayPastSessions.map((s) => s.averageTime));
 
-    // Trigger Accuracy Personal Best if current accuracy exceeds best past, and is at least 80%
-    isNewBestAccuracy = finalAccuracy > bestPastAccuracy && finalAccuracy >= 80;
-
-    // Trigger Speed Personal Best if current speed is faster than best past, and accuracy is at least 90%
-    isNewBestSpeed = averageTimeMs > 0 && averageTimeMs < bestPastSpeed && finalAccuracy >= 90;
+      isNewBestAccuracy = finalAccuracy > bestTodayAccuracy && finalAccuracy >= 70;
+      isNewBestSpeed = averageTimeMs > 0 && averageTimeMs < bestTodaySpeed && finalAccuracy >= 80;
+    }
   }
 
   const isCelebration = isNewBestAccuracy || isNewBestSpeed;
@@ -453,12 +475,22 @@ export const Trainer: React.FC = () => {
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-mono text-terminal-muted uppercase block">Drill Type</label>
                   <select
-                    value={practiceModeType}
-                    onChange={(e) => updateSettings({ practiceModeType: e.target.value as 'stable' | 'time_limit' })}
+                    value={flashModeEnabled ? 'flash' : practiceModeType}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'flash') {
+                        updateSettings({ flashModeEnabled: true, practiceModeType: 'stable' });
+                      } else {
+                        updateSettings({ flashModeEnabled: false, practiceModeType: val as 'stable' | 'time_limit' });
+                      }
+                    }}
                     className="w-full bg-terminal-bg border border-terminal-border text-terminal-text text-xs font-mono p-1.5 rounded-none outline-none cursor-pointer"
                   >
                     <option value="stable">Stable (Accuracy focus)</option>
                     <option value="time_limit">Time-Limit (Speed focus)</option>
+                    {experimentalFeaturesEnabled && (
+                      <option value="flash">Flash Recall (Memory focus)</option>
+                    )}
                   </select>
                 </div>
 
@@ -476,6 +508,31 @@ export const Trainer: React.FC = () => {
                   </select>
                 </div>
               </div>
+
+              {/* Flash Recall Exposure Selector (Visible when Flash Mode is selected) */}
+              {flashModeEnabled && (
+                <div className="space-y-1.5 pt-2 border-t border-terminal-border/20">
+                  <label className="text-[10px] font-mono text-terminal-muted uppercase block font-bold">
+                    Flash Exposure Duration
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[100, 200, 300, 500].map((ms) => (
+                      <button
+                        key={ms}
+                        type="button"
+                        onClick={() => updateSettings({ flashDurationMs: ms })}
+                        className={`py-1 border text-center font-mono text-xs cursor-pointer ${
+                          flashDurationMs === ms
+                            ? 'bg-warning-amber/20 border-warning-amber text-warning-amber font-bold'
+                            : 'bg-terminal-bg border-terminal-border text-terminal-muted hover:border-terminal-muted'
+                        }`}
+                      >
+                        {ms}ms
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {practiceModeType === 'time_limit' && (
                 <div className="space-y-3 pt-1 border-t border-terminal-border/20 mt-1 font-mono text-xs">
@@ -628,15 +685,15 @@ export const Trainer: React.FC = () => {
   if (sessionState === 'COMPLETED' || sessionState === 'TERMINATED') {
     return (
       <div key="trainer-results" className="w-full max-w-4xl mx-auto space-y-5 animate-fadeIn relative">
-        {/* Confetti celebration for new personal bests */}
-        {isCelebration && <ConfettiBurst durationMs={5000} />}
+        {/* Celebration for breaking Today's Personal Best */}
+        {isCelebration && (celebrationEffect === 'money_rain' ? <MoneyRainBurst durationMs={5000} /> : <ConfettiBurst durationMs={5000} />)}
 
         {/* Celebration Announcement Banner */}
         {isCelebration && (
           <div className="bg-terminal-panel border-2 border-success-green p-4 text-center font-mono space-y-1.5 shadow-[0_0_20px_rgba(0,200,83,0.2)] animate-pulse relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-success-green via-info-blue to-warning-amber" />
             <h1 className="text-sm font-black text-success-green uppercase tracking-widest flex items-center justify-center gap-2">
-              🏆 🎉 NEW PERSONAL RECORD BROKEN 🎉 🏆
+              🏆 🎉 TODAY'S PERSONAL RECORD BROKEN 🎉 🏆
             </h1>
             <p className="text-[11px] text-terminal-text uppercase leading-normal">
               {isNewBestAccuracy && isNewBestSpeed
@@ -884,13 +941,13 @@ export const Trainer: React.FC = () => {
             </div>
           ) : (
             <>
-              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white uppercase">
-                {action} {ecn}
+              <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white uppercase min-h-[1.2em]">
+                {isPromptHidden ? '\u00A0' : `${action} ${ecn}`}
               </h1>
 
               {priceTrainingEnabled && priceAdjustment !== undefined && (
-                <div className={`text-4xl md:text-5xl font-black ${priceAdjustment > 0 ? 'text-success-green' : 'text-error-red'}`}>
-                  {priceAdjustment > 0 ? `+${priceAdjustment}` : priceAdjustment}¢
+                <div className={`text-4xl md:text-5xl font-black min-h-[1.2em] ${priceAdjustment > 0 ? 'text-success-green' : 'text-error-red'}`}>
+                  {isPromptHidden ? '\u00A0' : priceAdjustment > 0 ? `+${priceAdjustment}` : priceAdjustment}¢
                 </div>
               )}
             </>

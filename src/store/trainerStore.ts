@@ -40,6 +40,10 @@ interface TrainerState {
   speedDecayMs: number;
   speedPenaltyMs: number;
   targetStreakLength: number;
+  flashModeEnabled: boolean;
+  flashDurationMs: number;
+  celebrationEffect: 'confetti' | 'money_rain';
+  experimentalFeaturesEnabled: boolean;
 
   // Session state machine
   sessionState: 'IDLE' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'TERMINATED';
@@ -107,7 +111,7 @@ interface TrainerState {
   startSession: () => void;
   pauseSession: () => void;
   resumeSession: () => void;
-  endSession: (completed?: boolean) => void;
+  endSession: (completed?: boolean) => Promise<void>;
   resetSession: () => void;
   resetToIdle: () => void;
   nextPrompt: () => void;
@@ -121,8 +125,9 @@ interface TrainerState {
   clearPromptInput: () => void; // Esc
 
   // Cleanup
-  clearHistory: () => void;
+  clearHistory: () => Promise<void>;
   setSessions: (sessions: Session[]) => void;
+  loadSessions: () => Promise<void>;
 }
 
 const savedSettings = loadSettingsFromStorage();
@@ -155,6 +160,10 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
   speedDecayMs: savedSettings.speedDecayMs,
   speedPenaltyMs: savedSettings.speedPenaltyMs,
   targetStreakLength: savedSettings.targetStreakLength,
+  flashModeEnabled: savedSettings.flashModeEnabled ?? false,
+  flashDurationMs: savedSettings.flashDurationMs ?? 300,
+  celebrationEffect: savedSettings.celebrationEffect ?? 'money_rain',
+  experimentalFeaturesEnabled: savedSettings.experimentalFeaturesEnabled ?? false,
 
   // Session state
   sessionState: 'IDLE',
@@ -185,7 +194,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
   missedCount: 0,
 
   // Persistent data cache
-  sessions: loadSessionsFromStorage(),
+  sessions: [],
   ecnWeights: loadWeightsFromStorage(savedSettings.routingConfig?.groups || DEFAULT_GROUPS),
 
   // Keyboard debug info
@@ -222,7 +231,11 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
         initialTimeLimitMs: newSettings.initialTimeLimitMs !== undefined ? newSettings.initialTimeLimitMs : state.initialTimeLimitMs,
         speedDecayMs: newSettings.speedDecayMs !== undefined ? newSettings.speedDecayMs : state.speedDecayMs,
         speedPenaltyMs: newSettings.speedPenaltyMs !== undefined ? newSettings.speedPenaltyMs : state.speedPenaltyMs,
-        targetStreakLength: newSettings.targetStreakLength !== undefined ? newSettings.targetStreakLength : state.targetStreakLength
+        targetStreakLength: newSettings.targetStreakLength !== undefined ? newSettings.targetStreakLength : state.targetStreakLength,
+        flashModeEnabled: newSettings.flashModeEnabled !== undefined ? newSettings.flashModeEnabled : state.flashModeEnabled,
+        flashDurationMs: newSettings.flashDurationMs !== undefined ? newSettings.flashDurationMs : state.flashDurationMs,
+        celebrationEffect: newSettings.celebrationEffect !== undefined ? newSettings.celebrationEffect : state.celebrationEffect,
+        experimentalFeaturesEnabled: newSettings.experimentalFeaturesEnabled !== undefined ? newSettings.experimentalFeaturesEnabled : state.experimentalFeaturesEnabled
       };
 
       saveSettingsToStorage(updated);
@@ -302,7 +315,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
 
   // Session Control Actions
   startSession: () => {
-    const sessions = loadSessionsFromStorage();
+    const sessions = get().sessions;
     const groups = get().routingConfig.groups;
     const ecnWeights = computePerformanceWeights(sessions, groups);
     const initialTimeLimitMs = get().initialTimeLimitMs;
@@ -358,7 +371,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
     });
   },
 
-  endSession: (completed = false) => {
+  endSession: async (completed = false) => {
     const {
       currentSessionEvents,
       mode,
@@ -375,7 +388,9 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
       initialTimeLimitMs,
       speedDecayMs,
       speedPenaltyMs,
-      targetStreakLength
+      targetStreakLength,
+      flashModeEnabled,
+      flashDurationMs
     } = get();
     if (!isSessionActive) return;
 
@@ -451,11 +466,13 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
       speedPenaltyMs,
       targetStreakLength,
       repetitionThreshold: 3,
-      sessionDurationMs
+      sessionDurationMs,
+      flashModeEnabled,
+      flashDurationMs
     };
 
     const nextSessions = [newSession, ...sessions];
-    saveSessionsToStorage(nextSessions);
+    await saveSessionsToStorage(nextSessions);
     saveWeightsToStorage(get().ecnWeights);
 
     set({
@@ -859,7 +876,7 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
     });
   },
 
-  clearHistory: () => {
+  clearHistory: async () => {
     // Clear storage keys
     try {
       localStorage.removeItem('ecn_trainer_sessions');
@@ -867,6 +884,8 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
     } catch {
       // Ignore
     }
+
+    await saveSessionsToStorage([]);
 
     set({
       sessions: [],
@@ -885,5 +904,12 @@ export const useTrainerStore = create<TrainerState>((set, get) => ({
       wrapsInCurrentPrompt: 0,
       recoveriesInCurrentPrompt: 0
     });
+  },
+
+  loadSessions: async () => {
+    const sessions = await loadSessionsFromStorage();
+    const groups = get().routingConfig.groups;
+    const ecnWeights = computePerformanceWeights(sessions, groups);
+    set({ sessions, ecnWeights });
   }
 }));

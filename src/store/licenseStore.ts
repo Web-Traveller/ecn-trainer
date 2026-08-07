@@ -35,6 +35,8 @@ interface LicenseStore {
   allowDevMode: boolean
 
   initialize: () => Promise<void>
+  syncDeviceStatus: () => Promise<void>
+  verifyDevTriggerOnDemand: (typedTrigger: string) => Promise<boolean>
   activateKey: (key: string) => Promise<{ success: boolean; message: string }>
   checkUpdateStatus: () => Promise<void>
 }
@@ -71,7 +73,7 @@ async function checkAndApplySilentUpdate(forceUpdate: boolean) {
   }
 }
 
-const APP_VERSION = '2.1.2' // Matches version in tauri.conf.json
+const APP_VERSION = '2.2.0' // Matches version in tauri.conf.json
 const OFFLINE_LIMIT_MS = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
 
 export const useLicenseStore = create<LicenseStore>((set, get) => {
@@ -82,6 +84,53 @@ export const useLicenseStore = create<LicenseStore>((set, get) => {
     localStorage.setItem('ecn_license_status', newState)
     set({ state: newState, ...additionalData })
   }
+
+  const syncDeviceStatus = async () => {
+    const { deviceId } = get();
+    if (!deviceId) return;
+    try {
+      const device = await checkDevice(deviceId);
+      if (device) {
+        const isDevAllowed = !!device.allow_dev_mode;
+        set({ allowDevMode: isDevAllowed });
+        localStorage.setItem('ecn_allow_dev', isDevAllowed ? 'true' : 'false');
+      }
+    } catch (err) {
+      // Ignore background sync errors when offline
+    }
+  };
+
+  const verifyDevTriggerOnDemand = async (typedTrigger: string): Promise<boolean> => {
+    const { deviceId } = get();
+    if (!deviceId) return false;
+    try {
+      const [config, device] = await Promise.all([
+        fetchAppConfig(),
+        checkDevice(deviceId)
+      ]);
+
+      if (config) {
+        set({
+          devTriggerWord: config.dev_trigger_word || 'MOCK',
+          devPasscode: config.dev_passcode || '2026'
+        });
+      }
+
+      if (device) {
+        const isDevAllowed = !!device.allow_dev_mode;
+        set({ allowDevMode: isDevAllowed });
+        localStorage.setItem('ecn_allow_dev', isDevAllowed ? 'true' : 'false');
+        
+        const triggerWord = (config?.dev_trigger_word || get().devTriggerWord || 'MOCK').toUpperCase();
+        if (isDevAllowed && typedTrigger.toUpperCase() === triggerWord) {
+          return true;
+        }
+      }
+    } catch (err) {
+      console.error('[DEV_CHECK] On-demand trigger check failed:', err);
+    }
+    return false;
+  };
 
   return {
     state: cachedStatus === 'checking' ? 'open' : cachedStatus,
@@ -96,7 +145,10 @@ export const useLicenseStore = create<LicenseStore>((set, get) => {
     licenseExpiry: null,
     devTriggerWord: null,
     devPasscode: null,
-    allowDevMode: false,
+    allowDevMode: localStorage.getItem('ecn_allow_dev') === 'true',
+
+    syncDeviceStatus,
+    verifyDevTriggerOnDemand,
 
     initialize: async () => {
       // Run silently in background without showing "checking..." spinner to the user

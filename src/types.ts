@@ -74,6 +74,10 @@ export interface Session {
   targetStreakLength?: number;
   repetitionThreshold?: number;
   sessionDurationMs?: number; // Total active time taken to complete session
+  flashModeEnabled?: boolean;
+  flashDurationMs?: number;
+  celebrationEffect?: 'confetti' | 'money_rain';
+  experimentalFeaturesEnabled?: boolean;
 }
 
 export interface ECNWeightMap {

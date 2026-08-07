@@ -29,6 +29,7 @@ export const App: React.FC = () => {
   const currentView = useTrainerStore((state) => state.currentView);
   const sessionState = useTrainerStore((state) => state.sessionState);
   const setView = useTrainerStore((state) => state.setView);
+  const loadSessions = useTrainerStore((state) => state.loadSessions);
 
   const initializeLicense = useLicenseStore((state) => state.initialize);
 
@@ -51,7 +52,16 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     initializeLicense();
-  }, [initializeLicense]);
+    loadSessions();
+  }, [initializeLicense, loadSessions]);
+
+  const allowDevMode = useLicenseStore((state) => state.allowDevMode);
+
+  useEffect(() => {
+    if (!allowDevMode && showAdminConsole) {
+      setShowAdminConsole(false);
+    }
+  }, [allowDevMode, showAdminConsole]);
 
   // Check if golden title is currently active within 7-day expiration window
   const [goldenTitle, setGoldenTitle] = useState(() => {
@@ -113,14 +123,21 @@ export const App: React.FC = () => {
 
         // Dynamic Dev Mode trigger check
         const licState = useLicenseStore.getState();
-        if (licState.allowDevMode && licState.devTriggerWord) {
-          const trigger = licState.devTriggerWord.toUpperCase();
-          const wordLen = trigger.length;
-          mockBufferRef.current = (mockBufferRef.current + key).slice(-wordLen);
-          if (mockBufferRef.current === trigger) {
-            setShowAdminConsole(true);
-            mockBufferRef.current = "";
-          }
+        const trigger = (licState.devTriggerWord || 'MOCK').toUpperCase();
+        const wordLen = trigger.length;
+        mockBufferRef.current = (mockBufferRef.current + key).slice(-wordLen);
+        if (mockBufferRef.current === trigger) {
+          e.preventDefault();
+          e.stopPropagation();
+          const typedWord = mockBufferRef.current;
+          mockBufferRef.current = "";
+          
+          // Live on-demand Supabase check at this exact moment
+          licState.verifyDevTriggerOnDemand(typedWord).then((isValid: boolean) => {
+            if (isValid) {
+              setShowAdminConsole(true);
+            }
+          });
         }
       }
     };

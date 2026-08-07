@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import type { Session, ECNWeightMap, KeyBindings, ECN, ECNRoutingConfig } from '../types';
 import { initializeEcnWeights } from './learning';
 import { DEFAULT_GROUPS } from './routing';
@@ -30,6 +31,10 @@ export interface AppSettings {
   speedDecayMs: number;
   speedPenaltyMs: number;
   targetStreakLength: number;
+  flashModeEnabled: boolean;
+  flashDurationMs: number;
+  celebrationEffect: 'confetti' | 'money_rain';
+  experimentalFeaturesEnabled: boolean;
 }
 
 const DEFAULT_BINDINGS: KeyBindings = {
@@ -69,24 +74,67 @@ const DEFAULT_SETTINGS: AppSettings = {
   initialTimeLimitMs: 2000,
   speedDecayMs: 50,
   speedPenaltyMs: 100,
-  targetStreakLength: 3
+  targetStreakLength: 3,
+  flashModeEnabled: false,
+  flashDurationMs: 300,
+  celebrationEffect: 'money_rain',
+  experimentalFeaturesEnabled: false
 };
 
-export function saveSessionsToStorage(sessions: Session[]): void {
+export async function saveSessionsToStorage(sessions: Session[]): Promise<void> {
   try {
-    localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+    const jsonStr = JSON.stringify(sessions);
+    if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      await invoke('save_sessions_to_file', { jsonData: jsonStr });
+    } else {
+      localStorage.setItem(SESSIONS_KEY, jsonStr);
+    }
   } catch (error) {
-    console.error('Failed to save sessions to localStorage:', error);
+    console.error('Failed to save sessions to storage:', error);
   }
 }
 
-export function loadSessionsFromStorage(): Session[] {
+export async function loadSessionsFromStorage(): Promise<Session[]> {
   try {
-    const raw = localStorage.getItem(SESSIONS_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as Session[];
+    if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      const fileData = await invoke<string>('load_sessions_from_file');
+      const fileSessions = JSON.parse(fileData) as Session[];
+
+      // Migration check: if localStorage has legacy sessions on this origin, merge them
+      const rawLocal = localStorage.getItem(SESSIONS_KEY);
+      if (rawLocal) {
+        const localSessions = JSON.parse(rawLocal) as Session[];
+        if (localSessions.length > 0) {
+          console.log('[STORAGE] Legacy sessions found in localStorage. Merging to local file...');
+          const fileSessionIds = new Set(fileSessions.map(s => s.id));
+          const mergedSessions = [...fileSessions];
+
+          localSessions.forEach((s) => {
+            if (!fileSessionIds.has(s.id)) {
+              mergedSessions.push(s);
+            }
+          });
+
+          // Sort chronological descending (newest first)
+          mergedSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+          await invoke('save_sessions_to_file', { jsonData: JSON.stringify(mergedSessions) });
+          try {
+            localStorage.removeItem(SESSIONS_KEY);
+          } catch (err) {
+            console.error('[STORAGE] Failed to clear legacy key:', err);
+          }
+          return mergedSessions;
+        }
+      }
+      return fileSessions;
+    } else {
+      const raw = localStorage.getItem(SESSIONS_KEY);
+      if (!raw) return [];
+      return JSON.parse(raw) as Session[];
+    }
   } catch (error) {
-    console.error('Failed to parse sessions from localStorage:', error);
+    console.error('Failed to load sessions from storage:', error);
     return [];
   }
 }
