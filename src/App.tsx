@@ -159,6 +159,7 @@ export const App: React.FC = () => {
   }
 
   const appVersion = useLicenseStore((state) => state.appVersion);
+  const shortVersion = appVersion.split('.').slice(0, 2).join('.');
 
   return (
     <div className="min-h-screen bg-terminal-bg text-terminal-text flex flex-col font-sans selection:bg-terminal-border selection:text-terminal-text relative">
@@ -172,12 +173,12 @@ export const App: React.FC = () => {
             <span className="font-bold font-mono tracking-wider flex items-center gap-1.5 select-none">
               {goldenTitle ? (
                 <span className="text-amber-400 font-bold flex items-center gap-1.5 animate-pulse">
-                  👑 ECN EXECUTION TERMINAL v{appVersion}
+                  👑 ECN EXECUTION TERMINAL v{shortVersion}
                 </span>
               ) : (
                 <span className="text-terminal-text flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 bg-info-blue inline-block"></span>
-                  ECN EXECUTION TERMINAL v{appVersion}
+                  ECN EXECUTION TERMINAL v{shortVersion}
                 </span>
               )}
             </span>
