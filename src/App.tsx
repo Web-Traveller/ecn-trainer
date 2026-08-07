@@ -131,7 +131,7 @@ export const App: React.FC = () => {
           e.stopPropagation();
           const typedWord = mockBufferRef.current;
           mockBufferRef.current = "";
-          
+
           // Live on-demand Supabase check at this exact moment
           licState.verifyDevTriggerOnDemand(typedWord).then((isValid: boolean) => {
             if (isValid) {
@@ -158,6 +158,8 @@ export const App: React.FC = () => {
     );
   }
 
+  const appVersion = useLicenseStore((state) => state.appVersion);
+
   return (
     <div className="min-h-screen bg-terminal-bg text-terminal-text flex flex-col font-sans selection:bg-terminal-border selection:text-terminal-text relative">
       {/* Golden Confetti Particle Burst (4 Seconds) */}
@@ -170,12 +172,12 @@ export const App: React.FC = () => {
             <span className="font-bold font-mono tracking-wider flex items-center gap-1.5 select-none">
               {goldenTitle ? (
                 <span className="text-amber-400 font-bold flex items-center gap-1.5 animate-pulse">
-                  👑 ECN EXECUTION TERMINAL v2.1
+                  👑 ECN EXECUTION TERMINAL v{appVersion}
                 </span>
               ) : (
                 <span className="text-terminal-text flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 bg-info-blue inline-block"></span>
-                  ECN EXECUTION TERMINAL v2.1
+                  ECN EXECUTION TERMINAL v{appVersion}
                 </span>
               )}
             </span>
