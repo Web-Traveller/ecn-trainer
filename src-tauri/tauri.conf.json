@@ -44,7 +44,6 @@
       "dialog": false,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM0MUU0OTZGRDgxNzMwQjEKUldTeE1CZlliMGtlTkNmZDE3QTJUNlBQYUVSdksyRmcrS1FTSXBxaUV5Vk9EUWR0bGlYRDRRaGMK",
       "endpoints": [
-        "https://raw.githubusercontent.com/Web-Traveller/ecn-trainer/new-dev/releases/update.json",
         "https://tvjlahqfmjprgmntryea.supabase.co/storage/v1/object/public/releases/update.json"
       ],
       "windows": {
