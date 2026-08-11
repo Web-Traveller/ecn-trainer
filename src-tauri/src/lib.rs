@@ -1,7 +1,10 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use sha2::{Sha256, Digest};
 use tauri::Manager;
+
+static CACHED_HARDWARE_UID: OnceLock<String> = OnceLock::new();
 
 fn get_state_file_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
   let mut path = app_handle.path().app_local_data_dir().map_err(|e| e.to_string())?;
@@ -21,17 +24,86 @@ fn compute_timestamp_hash(timestamp: i64, machine_id: &str) -> String {
   format!("{:x}", hasher.finalize())
 }
 
-#[tauri::command]
-fn get_hardware_uid() -> Result<String, String> {
-  match machine_uid::get() {
-    Ok(uid) => {
-      let mut hasher = Sha256::new();
-      hasher.update(uid.as_bytes());
-      let result = hasher.finalize();
-      Ok(format!("{:x}", result))
-    }
-    Err(e) => Err(e.to_string()),
+fn get_device_salt(app_handle: &tauri::AppHandle) -> String {
+  let mut path = match app_handle.path().app_local_data_dir() {
+    Ok(p) => p,
+    Err(_) => return "ecn-fallback-salt".to_string(),
+  };
+  if !path.exists() {
+    let _ = fs::create_dir_all(&path);
   }
+  path.push(".device_salt");
+
+  if path.exists() {
+    if let Ok(salt) = fs::read_to_string(&path) {
+      let trimmed = salt.trim();
+      if !trimmed.is_empty() {
+        return trimmed.to_string();
+      }
+    }
+  }
+
+  let raw_seed = format!(
+    "{:?}:{}:ecn-salt-2026",
+    std::time::SystemTime::now(),
+    machine_uid::get().unwrap_or_else(|_| "random-seed".to_string())
+  );
+  let mut hasher = Sha256::new();
+  hasher.update(raw_seed.as_bytes());
+  let new_salt = format!("{:x}", hasher.finalize());
+
+  let _ = fs::write(&path, &new_salt);
+  new_salt
+}
+
+#[cfg(target_os = "windows")]
+fn query_hardware_info() -> String {
+  use std::os::windows::process::CommandExt;
+  const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+  let script = "Write-Output ('SYS:' + (Get-CimInstance Win32_ComputerSystemProduct -ErrorAction SilentlyContinue).UUID + '|BIOS:' + (Get-CimInstance Win32_BIOS -ErrorAction SilentlyContinue).SerialNumber + '|MB:' + (Get-CimInstance Win32_BaseBoard -ErrorAction SilentlyContinue).SerialNumber + '|DISK:' + ((Get-CimInstance Win32_DiskDrive -ErrorAction SilentlyContinue).SerialNumber -join ','))";
+
+  let reg_guid = machine_uid::get().unwrap_or_else(|_| "reg_fallback".to_string());
+
+  match std::process::Command::new("powershell")
+    .args(["-NoProfile", "-NonInteractive", "-Command", script])
+    .creation_flags(CREATE_NO_WINDOW)
+    .output()
+  {
+    Ok(output) => {
+      let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+      if !stdout.is_empty() {
+        return format!("{}|REG:{}", stdout, reg_guid);
+      }
+    }
+    Err(_) => {}
+  }
+
+  format!("REG:{}", reg_guid)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn query_hardware_info() -> String {
+  machine_uid::get().unwrap_or_else(|_| "nix_fallback".to_string())
+}
+
+fn get_hardware_uid_internal(app_handle: &tauri::AppHandle) -> String {
+  CACHED_HARDWARE_UID
+    .get_or_init(|| {
+      let salt = get_device_salt(app_handle);
+      let hw_info = query_hardware_info();
+
+      let mut hasher = Sha256::new();
+      let payload = format!("{}:{}", hw_info, salt);
+      hasher.update(payload.as_bytes());
+      format!("v2-{:x}", hasher.finalize())
+    })
+    .clone()
+}
+
+#[tauri::command]
+fn get_hardware_uid(app_handle: tauri::AppHandle) -> Result<String, String> {
+  Ok(get_hardware_uid_internal(&app_handle))
 }
 
 #[tauri::command]
@@ -58,7 +130,7 @@ fn read_secure_timestamp(app_handle: tauri::AppHandle) -> Result<Option<i64>, St
   let timestamp: i64 = timestamp_str.parse().map_err(|_| "Invalid timestamp".to_string())?;
   
   // Get machine ID to verify the hash
-  let machine_id = machine_uid::get().unwrap_or_else(|_| "default_id".to_string());
+  let machine_id = get_hardware_uid_internal(&app_handle);
   let expected_hash = compute_timestamp_hash(timestamp, &machine_id);
 
   if hash_received == expected_hash {
@@ -71,7 +143,7 @@ fn read_secure_timestamp(app_handle: tauri::AppHandle) -> Result<Option<i64>, St
 #[tauri::command]
 fn write_secure_timestamp(app_handle: tauri::AppHandle, timestamp: i64) -> Result<(), String> {
   let path = get_state_file_path(&app_handle)?;
-  let machine_id = machine_uid::get().unwrap_or_else(|_| "default_id".to_string());
+  let machine_id = get_hardware_uid_internal(&app_handle);
   let hash = compute_timestamp_hash(timestamp, &machine_id);
   let content = format!("{}:{}", timestamp, hash);
   fs::write(path, content).map_err(|e| e.to_string())?;
@@ -134,7 +206,7 @@ fn save_sessions_to_file(app_handle: tauri::AppHandle, json_data: String) -> Res
   fs::write(&path, &json_data).map_err(|e| e.to_string())?;
 
   // 3. Compute and write integrity signature
-  let machine_id = machine_uid::get().unwrap_or_else(|_| "default_id".to_string());
+  let machine_id = get_hardware_uid_internal(&app_handle);
   let sig = compute_sessions_hash(&json_data, &machine_id);
   let mut sig_path = path.clone();
   sig_path.set_file_name("sessions.json.sig");
@@ -166,7 +238,7 @@ fn load_sessions_from_file(app_handle: tauri::AppHandle) -> Result<String, Strin
   }
 
   // Verify integrity signature if present
-  let machine_id = machine_uid::get().unwrap_or_else(|_| "default_id".to_string());
+  let machine_id = get_hardware_uid_internal(&app_handle);
   let expected_sig = compute_sessions_hash(&content, &machine_id);
   let mut sig_path = path.clone();
   sig_path.set_file_name("sessions.json.sig");
@@ -208,4 +280,5 @@ pub fn run() {
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
+
 

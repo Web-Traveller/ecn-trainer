@@ -1,11 +1,11 @@
 {
-  "version": "v2.2.0",
-  "notes": "ECN Execution Trainer v2.2.0 Release - Features: Mathematical Direct Session Injector, Money Rain Celebration Mode, Daily Record Reset, KISS Settings, SHA-256 Hardware Integrity Locking & Rolling Backups.",
-  "pub_date": "2026-08-07T00:00:00Z",
+  "version": "v2.2.1",
+  "notes": "ECN Execution Trainer v2.2.1 Release - Features: Multi-Factor Composite Hardware Device ID (System UUID, BIOS, Motherboard, Physical SSD Firmware Serial & Persistent Salt) with v2- prefix to eliminate device collisions, and Practice Minutes weekend hiding for closed market days.",
+  "pub_date": "2026-08-12T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTeE1CZlliMGtlTkF3STlweTQ1TnlmZEFpYUJUOTUrbVcrTlo0c2F0ZXFDS3FucmdYT1BLL0ZnWXorOFJCNDVTN1pnVzVKMFQxaHlpZmlFVzk1SnEzWlZRNzF0K3p2dWdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg2MDY2NTU4CWZpbGU6RUNOIEV4ZWN1dGlvbiBUcmFpbmVyXzIuMi4wX3g2NC1zZXR1cC5leGUKVXdwNi92VFVLc0RqK0ZMemRUeTRMQ2F5aUNmS0RBU3F2OEQ3czVQSUlCeldFcGpUMHVNOFYxaVNGMHRJdG5HVjNsdXhac1crN0FlY0QyMWZnZE9mQ2c9PQo=",
-      "url": "https://github.com/Web-Traveller/ecn-trainer/releases/download/v2.2.0/ECN.Execution.Trainer_2.2.0_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTeE1CZlliMGtlTkgySnFiRENhTHlJcFpvR0JxdWdDZ2FXTi92QlNHaUVUdGhScHJVKytJeHhoSGIzWTEyRWg4OE5OOVdZNjBNUUtUV1FBY3M0akd3OHFQbVBTRzdMRUFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg2NDg5MTQwCWZpbGU6RUNOIEV4ZWN1dGlvbiBUcmFpbmVyXzIuMi4xX3g2NC1zZXR1cC5leGUKSXNrMTBsc3VxNnNZYUVFdWhZODdzOWllbjF4Q2JTRjdTNm44ZndNbnRuaUhxRms5Mi8vNmpMYTlBMElpUm9YT0V1WGNDK2NDTzB1TGZ1MGN1MTBvQ2c9PQo=",
+      "url": "https://github.com/Web-Traveller/ecn-trainer/releases/download/v2.2.1/ECN.Execution.Trainer_2.2.1_x64-setup.exe"
     }
   }
 }

@@ -169,8 +169,8 @@ export const useLicenseStore = create<LicenseStore>((set, get) => {
         console.error('Failed to retrieve system hardware info:', err)
         // Fallback: Generate local persistent UUID if machine-uid fails
         let localUuid = localStorage.getItem('ecn_device_uuid')
-        if (!localUuid) {
-          localUuid = crypto.randomUUID()
+        if (!localUuid || !localUuid.startsWith('v2-')) {
+          localUuid = `v2-${crypto.randomUUID()}`
           localStorage.setItem('ecn_device_uuid', localUuid)
         }
         deviceId = localUuid

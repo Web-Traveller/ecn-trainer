@@ -651,17 +651,27 @@ export function calculatePracticeHabitStats(sessions: Session[]): PracticeHabitS
   }
   const weeklyConsistencyPercent = (activeInLast7 / 7) * 100;
 
-  // 4. Last 14 days chart data
+  // 4. Last 14 days chart data (Hiding weekend days Saturday/Sunday if 0 practice minutes)
   const last14DaysData: { dateStr: string; label: string; minutes: number }[] = [];
   for (let i = 13; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
     const dStr = getLocalDateString(d);
+    const dayOfWeek = d.getDay(); // 0 = Sunday, 6 = Saturday
+    const minutes = dailyMap[dStr]?.minutes || 0;
+
+    // Hide weekend days (Sat/Sun) if there are 0 practice minutes on that day.
+    // If practice minutes > 0 on a weekend day, include it in the chart!
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    if (isWeekend && minutes <= 0) {
+      continue;
+    }
+
     const label = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
     last14DaysData.push({
       dateStr: dStr,
       label,
-      minutes: dailyMap[dStr]?.minutes || 0
+      minutes
     });
   }
 
